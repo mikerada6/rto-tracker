@@ -1,0 +1,50 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/rto_tracker}
+    username: ${DATABASE_USER:rto}
+    password: ${DATABASE_PASSWORD:rto}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: public
+    open-in-view: false
+  flyway:
+    enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  deduplication-window-minutes: 5
+  rate-limit-rpm: ${APP_RATE_LIMIT_RPM:100}
+  registration-enabled: ${APP_REGISTRATION_ENABLED:false}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: rto-tracker
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${TEMPO_URL:http://localhost:9411}/api/v2/spans
+
+logging:
+  level:
+    com.rto.tracker: DEBUG

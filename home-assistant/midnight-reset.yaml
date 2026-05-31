@@ -1,0 +1,30 @@
+# ============================================================
+# RTO Tracker — Midnight Reset Automation
+# ============================================================
+# Import this as a SEPARATE automation in Home Assistant.
+#
+# Purpose: resets input_boolean.office_visit_today to "off"
+# every night at 00:01 so that the office-day counter in the
+# main automation fires exactly once per working day.
+#
+# Without this reset, the boolean stays "on" after Monday and
+# the counter never increments again for the rest of the week.
+# ============================================================
+
+alias: "RTO: Reset office_visit_today at midnight"
+description: >
+  Resets input_boolean.office_visit_today at 00:01 every day so that
+  the office-day counter in "Combined Commute and Work Logging" fires
+  exactly once per calendar day.
+
+triggers:
+  - trigger: time
+    at: "00:01:00"
+
+actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.office_visit_today
+
+mode: single
+

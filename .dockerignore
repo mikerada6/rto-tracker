@@ -1,0 +1,12 @@
+frontend/
+.git/
+.idea/
+.vscode/
+.claude/
+*.md
+*.tar.gz
+.env
+.gitignore
+.dockerignore
+docker-compose*.yml
+home-assistant/

@@ -1,0 +1,36 @@
+# ============================================================
+# RTO Tracker — rest_command definitions
+# ============================================================
+# Add to configuration.yaml:
+#   rest_command: !include home_assistant_rest_commands.yaml
+#
+# API keys are stored in secrets.yaml — never hardcoded here.
+# See home_assistant_secrets_snippet.yaml for the required entries.
+# ============================================================
+
+rto_event_michael:
+  url: "http://!secret rto_server_host:8080/api/v1/events"
+  method: POST
+  content_type: "application/json; charset=utf-8"
+  headers:
+    X-API-Key: !secret rto_api_key_michael
+  payload: >-
+    {
+      "externalId": "{{ externalId }}",
+      "eventType":  "{{ eventType }}",
+      "timestamp":  "{{ timestamp }}"
+    }
+
+rto_event_jen:
+  url: "http://!secret rto_server_host:8080/api/v1/events"
+  method: POST
+  content_type: "application/json; charset=utf-8"
+  headers:
+    X-API-Key: !secret rto_api_key_jen
+  payload: >-
+    {
+      "externalId": "{{ externalId }}",
+      "eventType":  "{{ eventType }}",
+      "timestamp":  "{{ timestamp }}"
+    }
+

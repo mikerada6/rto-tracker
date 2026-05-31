@@ -1,0 +1,435 @@
+# ============================================================
+# RTO Tracker — Home Assistant Automation
+# ============================================================
+#
+# SETUP INSTRUCTIONS
+# ------------------
+# This file contains ONLY the automation. Two companion files
+# must also be configured in your HA config directory:
+#
+#   home_assistant_rest_commands.yaml  → add to configuration.yaml:
+#       rest_command: !include home_assistant_rest_commands.yaml
+#
+#   home_assistant_secrets_snippet.yaml → merge entries into secrets.yaml
+#
+#   home_assistant_midnight_reset.yaml → import as a second automation;
+#       resets input_boolean.office_visit_today at midnight so the
+#       office-day counter increments correctly each new calendar day.
+#
+# ZONE SETUP
+# ----------
+# Create the following Zones in the RTO Tracker UI and set each
+# zone's "External ID" to the exact string shown:
+#
+#   Michael's account:
+#     zone.home                           → type HOME
+#     zone.comcast                        → type OFFICE
+#     zone.comcast_bishops_gate           → type OFFICE
+#     zone.lindenwold_patco               → type TRAIN_STATION
+#     zone.15_16th_locust_street_station  → type TRAIN_STATION
+#
+#   Jen's account:
+#     zone.home                           → type HOME
+#     zone.johnson_matthey                → type OFFICE
+# ============================================================
+
+alias: Combined Commute and Work Logging
+description: >
+  Manages commute times, work logs, and RTO Tracker API calls for Michael and Jen.
+  Zone ENTER/EXIT events are posted to the RTO Tracker backend so compliance
+  metrics are computed automatically.
+
+triggers:
+  # ── Michael ──────────────────────────────────────────────
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.home
+    event: leave
+    id: mike_leaves_home
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.comcast
+    event: enter
+    id: mike_arrives_work
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.comcast
+    event: leave
+    id: mike_leaves_work
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.home
+    event: enter
+    id: mike_arrives_home
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.lindenwold_patco
+    event: enter
+    id: mike_enters_lindenwold
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.lindenwold_patco
+    event: leave
+    id: mike_leaves_lindenwold
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.15_16th_locust_street_station
+    event: enter
+    id: mike_enters_locust
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.15_16th_locust_street_station
+    event: leave
+    id: mike_leaves_locust
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.comcast_bishops_gate
+    event: enter
+    id: mike_enters_bishops_gate
+
+  - trigger: zone
+    entity_id: person.michael
+    zone: zone.comcast_bishops_gate
+    event: leave
+    id: mike_leaves_bishops_gate
+
+  # ── Jen ──────────────────────────────────────────────────
+  - trigger: zone
+    entity_id: person.jen
+    zone: zone.home
+    event: leave
+    id: jen_leaves_home
+
+  - trigger: zone
+    entity_id: person.jen
+    zone: zone.johnson_matthey
+    event: enter
+    id: jen_arrives_work
+
+  - trigger: zone
+    entity_id: person.jen
+    zone: zone.johnson_matthey
+    event: leave
+    id: jen_leaves_work
+
+  - trigger: zone
+    entity_id: person.jen
+    zone: zone.home
+    event: enter
+    id: jen_arrives_home
+
+  # ── Office-day counter (legacy helper) ───────────────────
+  - trigger: state
+    entity_id: input_boolean.office_visit_today
+    to: "on"
+    id: office_visit_registered
+
+actions:
+  - choose:
+
+      # ── Michael leaves home ──────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: mike_leaves_home
+        sequence:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.mikelastleavehome
+            data:
+              datetime: "{{ now().isoformat() }}"
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.home
+              eventType: EXIT
+              # utcnow() returns a true UTC datetime object; appending 'Z'
+              # produces a valid ISO-8601 instant the backend Instant parser accepts.
+              # Do NOT use now().utc — that attribute does not exist in HA Jinja2.
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael arrives at work — Comcast main ───────────
+      # office_visit_today is set on FIRST arrival only; GPS bounce
+      # will re-fire the trigger but the if-guard prevents duplicates.
+      - conditions:
+          - condition: trigger
+            id: mike_arrives_work
+        sequence:
+          - if:
+              - condition: state
+                entity_id: input_boolean.office_visit_today
+                state: "off"
+            then:
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.office_entry_time
+                data:
+                  datetime: "{{ now().isoformat() }}"
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.office_visit_today
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.comcast
+              eventType: ENTER
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael leaves work — Comcast main ───────────────
+      - conditions:
+          - condition: trigger
+            id: mike_leaves_work
+        sequence:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.mikelastleavework
+            data:
+              datetime: "{{ now().isoformat() }}"
+          - if:
+              - condition: time
+                weekday: [mon, tue, wed, thu, fri]
+            then:
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.office_exit_time
+                data:
+                  datetime: "{{ now().isoformat() }}"
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.office_time_log
+                data:
+                  value: >-
+                    {% set entry_dt  = states.input_datetime.office_entry_time.last_updated %}
+                    {% set exit_dt   = now() %}
+                    {% set hours     = ((exit_dt - entry_dt).total_seconds() / 3600) | round(2) %}
+                    {% set new_entry = entry_dt.strftime('%Y-%m-%d') ~ ': In '
+                       ~ entry_dt.strftime('%H:%M') ~ ' → Out '
+                       ~ exit_dt.strftime('%H:%M') ~ ' (' ~ hours ~ ' h)' %}
+                    {% set log = states('input_text.office_time_log').split('\n')
+                                 | reject('equalto', '') | list %}
+                    {{ ((log[-9:] if log | length >= 10 else log) + [new_entry]) | join('\n') }}
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.comcast
+              eventType: EXIT
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael arrives home ─────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: mike_arrives_home
+        sequence:
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ (now() - states.input_datetime.mikelastleavework.last_updated).total_seconds() < 5400 }}
+            then:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.mikecommutetohometime
+                data:
+                  value: >-
+                    {{ ((now() - states.input_datetime.mikelastleavework.last_updated).total_seconds() / 60) | round(0) }}
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.home
+              eventType: ENTER
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael enters Lindenwold PATCO ──────────────────
+      - conditions:
+          - condition: trigger
+            id: mike_enters_lindenwold
+        sequence:
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.lindenwold_patco
+              eventType: ENTER
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael leaves Lindenwold PATCO ──────────────────
+      - conditions:
+          - condition: trigger
+            id: mike_leaves_lindenwold
+        sequence:
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.lindenwold_patco
+              eventType: EXIT
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael enters 15/16th & Locust PATCO ────────────
+      - conditions:
+          - condition: trigger
+            id: mike_enters_locust
+        sequence:
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.15_16th_locust_street_station
+              eventType: ENTER
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael leaves 15/16th & Locust PATCO ────────────
+      - conditions:
+          - condition: trigger
+            id: mike_leaves_locust
+        sequence:
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.15_16th_locust_street_station
+              eventType: EXIT
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael enters Bishop's Gate (Comcast secondary) ─
+      # FIX: also sets office_visit_today so the day is counted
+      # regardless of which Comcast zone Michael enters first.
+      - conditions:
+          - condition: trigger
+            id: mike_enters_bishops_gate
+        sequence:
+          - if:
+              - condition: state
+                entity_id: input_boolean.office_visit_today
+                state: "off"
+            then:
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.office_entry_time
+                data:
+                  datetime: "{{ now().isoformat() }}"
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.office_visit_today
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.comcast_bishops_gate
+              eventType: ENTER
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Michael leaves Bishop's Gate ─────────────────────
+      - conditions:
+          - condition: trigger
+            id: mike_leaves_bishops_gate
+        sequence:
+          - action: rest_command.rto_event_michael
+            data:
+              externalId: zone.comcast_bishops_gate
+              eventType: EXIT
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Jen leaves home ───────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: jen_leaves_home
+        sequence:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.jenlastleavehome
+            data:
+              datetime: "{{ now().isoformat() }}"
+          - if:
+              - condition: time
+                after: "05:00:00"
+                before: "12:00:00"
+                weekday: [sun, mon, tue, wed, thu]
+              - condition: state
+                entity_id: person.michael
+                state: home
+            then:
+              - action: light.turn_off
+                target:
+                  entity_id:
+                    - light.closet
+                    - light.bedroom_light
+          - action: rest_command.rto_event_jen
+            data:
+              externalId: zone.home
+              eventType: EXIT
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Jen arrives at work ───────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: jen_arrives_work
+        sequence:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.jencommutetoworktime
+            data:
+              value: >-
+                {{ ((now() - states.input_datetime.jenlastleavehome.last_updated).total_seconds() / 60) | round(0) }}
+          - action: rest_command.rto_event_jen
+            data:
+              externalId: zone.johnson_matthey
+              eventType: ENTER
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Jen leaves work ───────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: jen_leaves_work
+        sequence:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.jenlastleavework
+            data:
+              datetime: "{{ now().isoformat() }}"
+          - action: light.turn_on
+            target:
+              device_id:
+                - 3eb9245f840d485afd6305948f389a83
+                - 21121fa695139253dd71a76ab4eb9dd3
+                - 6cc4de3d8f644206879b7c71c6a2c2f2
+                - 23266c8a25f90ff538807dca489a49c4
+            data:
+              flash: short
+          - action: rest_command.rto_event_jen
+            data:
+              externalId: zone.johnson_matthey
+              eventType: EXIT
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Jen arrives home ─────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: jen_arrives_home
+        sequence:
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ (now() - states.input_datetime.jenlastleavework.last_updated).total_seconds() < 5400 }}
+            then:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.jencommutetohometime
+                data:
+                  value: >-
+                    {{ ((now() - states.input_datetime.jenlastleavework.last_updated).total_seconds() / 60) | round(0) }}
+          - action: rest_command.rto_event_jen
+            data:
+              externalId: zone.home
+              eventType: ENTER
+              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+
+      # ── Legacy: increment office_days_quarter counter ────
+      # Fires when office_visit_today flips to on (weekdays only).
+      # The midnight reset automation ensures this fires exactly once
+      # per working day.
+      - conditions:
+          - condition: trigger
+            id: office_visit_registered
+          - condition: time
+            weekday: [mon, tue, wed, thu, fri]
+        sequence:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.office_days_quarter
+            data:
+              value: "{{ states('input_number.office_days_quarter') | int(0) + 1 }}"
+
+mode: parallel

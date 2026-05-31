@@ -1,0 +1,26 @@
+services:
+
+  # ── Backend (Spring Boot) ────────────────────────────────────────
+  app:
+    build: ./backend
+    image: ${DOCKER_REGISTRY:-}rto-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      DATABASE_USER: ${DATABASE_USER:?Set DATABASE_USER in .env}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
+      TEMPO_URL: ${TEMPO_URL:-}
+      APP_RATE_LIMIT_RPM: ${APP_RATE_LIMIT_RPM:-100}
+      APP_REGISTRATION_ENABLED: ${APP_REGISTRATION_ENABLED:-false}
+
+  # ── Frontend (Angular + Nginx) ──────────────────────────────────
+  frontend:
+    build: ./frontend
+    image: ${DOCKER_REGISTRY:-}rto-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8880}:80"
+    depends_on:
+      - app

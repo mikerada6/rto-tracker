@@ -1,0 +1,63 @@
+@import "tailwindcss";
+@source "./**/*.ts";
+@source "./**/*.html";
+
+/* Enable class-based dark mode for Tailwind v4 dark: variants */
+@variant dark (&:is(.dark *));
+
+:root {
+  --color-on-track: #16a34a;
+  --color-behind: #d97706;
+  --color-critical: #dc2626;
+  --color-compliant: #16a34a;
+  --color-non-compliant: #dc2626;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f9fafb;
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+  --color-text-secondary: #6b7280;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text);
+}
+
+/* ── Dark mode ── */
+/* Invert the gray scale so all bg-gray-*, text-gray-*, border-gray-* utilities flip automatically */
+html.dark {
+  color-scheme: dark;
+  --color-gray-50:  oklch(0.145 0 0);
+  --color-gray-100: oklch(0.205 0 0);
+  --color-gray-200: oklch(0.269 0 0);
+  --color-gray-300: oklch(0.371 0 0);
+  --color-gray-400: oklch(0.439 0 0);
+  --color-gray-500: oklch(0.556 0 0);
+  --color-gray-600: oklch(0.707 0 0);
+  --color-gray-700: oklch(0.761 0 0);
+  --color-gray-800: oklch(0.869 0 0);
+  --color-gray-900: oklch(0.939 0 0);
+  --color-gray-950: oklch(0.985 0 0);
+}
+
+/* bg-white elements become dark surface cards in dark mode */
+html.dark .bg-white {
+  background-color: oklch(0.205 0 0);
+}
+
+/* Ensure borders on "white" surfaces remain subtle */
+html.dark .border-gray-100 {
+  border-color: oklch(0.269 0 0);
+}
+
+/* Native form elements (select, input) respect dark color scheme */
+html.dark select,
+html.dark input,
+html.dark textarea {
+  color-scheme: dark;
+}
+
