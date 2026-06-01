@@ -118,15 +118,22 @@ public class EventService {
     @Transactional
     public BulkUploadResponse bulkImport(User user, MultipartFile file, Map<String, String> zoneMapping) {
         UUID userId = user.getId();
+        log.info("Bulk import: resolving {} zone mappings for userId={}", zoneMapping.size(), userId);
 
         // Pre-resolve all zones from the mapping
         Map<String, Zone> resolvedZones = new HashMap<>();
         for (Map.Entry<String, String> entry : zoneMapping.entrySet()) {
             String csvName = entry.getKey();
             String dbExternalId = entry.getValue();
+            log.debug("Resolving zone mapping: csvName='{}' -> externalId='{}', userId={}", csvName, dbExternalId, userId);
             Zone zone = zoneRepository.findByUserIdAndExternalId(userId, dbExternalId)
-                    .orElseThrow(() -> new EntityNotFoundException(
-                            "Zone with externalId '" + dbExternalId + "' not found (mapped from CSV name '" + csvName + "')"));
+                    .orElseThrow(() -> {
+                        log.error("Zone resolution failed: externalId='{}' not found for userId={} (CSV name='{}')",
+                                dbExternalId, userId, csvName);
+                        return new EntityNotFoundException(
+                            "Zone with externalId '" + dbExternalId + "' not found (mapped from CSV name '" + csvName + "')");
+                    });
+            log.debug("Zone resolved: csvName='{}' -> zone.id={}, zone.name='{}'", csvName, zone.getId(), zone.getName());
             resolvedZones.put(csvName, zone);
         }
 
@@ -219,6 +226,7 @@ public class EventService {
                 }
             }
         } catch (java.io.IOException e) {
+            log.error("Bulk import failed: unable to read CSV file for userId={}, fileName={}", userId, file.getOriginalFilename(), e);
             throw new BusinessRuleException("Failed to read CSV file: " + e.getMessage());
         }
 

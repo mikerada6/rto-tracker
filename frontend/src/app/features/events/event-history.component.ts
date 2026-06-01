@@ -382,11 +382,16 @@ export class EventHistoryComponent implements OnInit {
         this.uploadResult.set(result);
         this.uploading.set(false);
         this.loadEvents();
-        this.toast.success(`Imported ${result.importedCount} events`);
+        if (result.errors?.length > 0) {
+          this.toast.error(`Import had ${result.errors.length} row error(s). See details below.`);
+        } else {
+          this.toast.success(`Imported ${result.importedCount} events`);
+        }
       },
-      error: () => {
+      error: (err) => {
         this.uploading.set(false);
-        this.toast.error('CSV upload failed.');
+        const message = err.error?.message || err.message || 'Unknown error';
+        this.toast.error(`CSV upload failed: ${message}`);
       }
     });
   }

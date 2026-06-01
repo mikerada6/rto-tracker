@@ -99,13 +99,27 @@ public class EventController {
         try {
             zoneMapping = objectMapper.readValue(zoneMappingJson, new TypeReference<>() {});
         } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+            log.warn("Bulk upload failed: userId={}, fileName={}, reason=invalid zoneMapping JSON, detail={}",
+                    user.getId(), file.getOriginalFilename(), e.getMessage());
+            throw new IllegalArgumentException(
+                    "Invalid zoneMapping JSON: " + e.getMessage());
         }
-        log.info("Bulk upload: userId={}, fileName={}, zoneMappings={}",
-                user.getId(), file.getOriginalFilename(), zoneMapping.size());
+
+        if (file.isEmpty()) {
+            log.warn("Bulk upload failed: userId={}, reason=empty file", user.getId());
+            throw new IllegalArgumentException("CSV file is empty");
+        }
+
+        log.info("Bulk upload started: userId={}, fileName={}, fileSize={} bytes, zoneMappings={}",
+                user.getId(), file.getOriginalFilename(), file.getSize(), zoneMapping);
         BulkUploadResponse response = eventService.bulkImport(user, file, zoneMapping);
         log.info("Bulk upload complete: userId={}, imported={}, skipped={}, errors={}",
                 user.getId(), response.getImportedCount(), response.getSkippedCount(), response.getErrors().size());
+        if (!response.getErrors().isEmpty()) {
+            log.warn("Bulk upload had row errors: userId={}, errorCount={}, firstError=row {} - {}",
+                    user.getId(), response.getErrors().size(),
+                    response.getErrors().getFirst().getRow(), response.getErrors().getFirst().getReason());
+        }
         return ResponseEntity.ok(response);
     }
 }
