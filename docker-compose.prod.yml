@@ -10,13 +10,14 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       DATABASE_USER: ${DATABASE_USER:?Set DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD}
+      LOKI_URL: ${LOKI_URL:?Set LOKI_URL}
       TEMPO_URL: ${TEMPO_URL:-}
       APP_RATE_LIMIT_RPM: ${APP_RATE_LIMIT_RPM:-100}
       APP_REGISTRATION_ENABLED: ${APP_REGISTRATION_ENABLED:-false}
     logging:
       driver: loki
       options:
-        loki-url: ${LOKI_URL:?Set LOKI_URL}
+        loki-url: "${LOKI_URL:?Set LOKI_URL}/loki/api/v1/push"
         loki-batch-size: "400"
         labels: "service=rto-backend"
 
@@ -31,6 +32,6 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: ${LOKI_URL:?Set LOKI_URL}
+        loki-url: "${LOKI_URL:?Set LOKI_URL}/loki/api/v1/push"
         loki-batch-size: "400"
         labels: "service=rto-frontend"
