@@ -194,13 +194,37 @@ export function buildJourneyPhases(segments: TimelineSegment[]): JourneyPhase[] 
   }
 
   // Office: all segments from first office entry to last office exit (inclusive)
+  // Include cross-phase transit from the last morning commute stop
   const officeSegs = segments.slice(firstOfficeIdx, lastOfficeIdx + 1);
-  phases.push(buildPhase('office', 'At Office', officeSegs));
+  const officePhase = buildPhase('office', 'At Office', officeSegs);
+  if (firstOfficeIdx > 0 && officePhase.stops.length > 0) {
+    const prevSeg = segments[firstOfficeIdx - 1];
+    const officeSeg = segments[firstOfficeIdx];
+    if (prevSeg.departureTime && officeSeg.arrivalTime) {
+      officePhase.stops[0].transitFromPrevSeconds =
+        Math.max(0, (officeSeg.arrivalTime.getTime() - prevSeg.departureTime.getTime()) / 1000);
+      officePhase.totalTransitSeconds += officePhase.stops[0].transitFromPrevSeconds;
+      officePhase.totalDurationSeconds += officePhase.stops[0].transitFromPrevSeconds;
+    }
+  }
+  phases.push(officePhase);
 
   // Evening commute: everything after last office exit
+  // Include cross-phase transit from the last office stop
   if (lastOfficeIdx < segments.length - 1) {
     const eveningSegs = segments.slice(lastOfficeIdx + 1);
-    phases.push(buildPhase('evening_commute', 'Evening Commute', eveningSegs));
+    const eveningPhase = buildPhase('evening_commute', 'Evening Commute', eveningSegs);
+    if (eveningPhase.stops.length > 0) {
+      const prevSeg = segments[lastOfficeIdx];
+      const firstEveningSeg = segments[lastOfficeIdx + 1];
+      if (prevSeg.departureTime && firstEveningSeg.arrivalTime) {
+        eveningPhase.stops[0].transitFromPrevSeconds =
+          Math.max(0, (firstEveningSeg.arrivalTime.getTime() - prevSeg.departureTime.getTime()) / 1000);
+        eveningPhase.totalTransitSeconds += eveningPhase.stops[0].transitFromPrevSeconds;
+        eveningPhase.totalDurationSeconds += eveningPhase.stops[0].transitFromPrevSeconds;
+      }
+    }
+    phases.push(eveningPhase);
   }
 
   return phases;
