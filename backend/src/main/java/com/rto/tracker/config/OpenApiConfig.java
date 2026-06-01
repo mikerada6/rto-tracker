@@ -5,15 +5,22 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 @Configuration
 public class OpenApiConfig {
 
+    @Value("${app.base-url:}")
+    private String baseUrl;
+
     @Bean
     public OpenAPI rtoTrackerOpenAPI() {
-        return new OpenAPI()
+        OpenAPI openAPI = new OpenAPI()
                 .info(new Info()
                         .title("RTO Tracker API")
                         .description("Commute and Return-to-Office tracking system. " +
@@ -27,5 +34,11 @@ public class OpenApiConfig {
                                 .in(SecurityScheme.In.HEADER)
                                 .name("X-API-Key")
                                 .description("API key for authentication. Pass as X-API-Key header.")));
+
+        if (baseUrl != null && !baseUrl.isBlank()) {
+            openAPI.servers(List.of(new Server().url(baseUrl).description("Primary")));
+        }
+
+        return openAPI;
     }
 }
