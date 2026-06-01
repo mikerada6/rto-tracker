@@ -69,6 +69,8 @@ jobs:
         with:
           context: ./backend
           push: true
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
           tags: |
             ${{ env.DOCKER_REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
             ${{ env.DOCKER_REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
@@ -80,6 +82,8 @@ jobs:
         with:
           context: ./frontend
           push: true
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
           tags: |
             ${{ env.DOCKER_REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.DOCKER_REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}

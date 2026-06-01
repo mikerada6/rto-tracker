@@ -20,6 +20,7 @@ app:
   deduplication-window-minutes: 5
   rate-limit-rpm: ${APP_RATE_LIMIT_RPM:100}
   registration-enabled: ${APP_REGISTRATION_ENABLED:false}
+  git-commit: ${GIT_COMMIT:dev}
 
 springdoc:
   api-docs:
