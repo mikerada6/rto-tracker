@@ -2,6 +2,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { ThemeService } from '../../core/services/theme.service';
+import { VersionService } from '../../core/services/version.service';
 
 @Component({
   selector: 'app-nav-sidebar',
@@ -41,6 +42,33 @@ import { ThemeService } from '../../core/services/theme.service';
 
       <!-- Footer -->
       <div class="p-2 border-t border-gray-200 space-y-1">
+        <!-- Version badge -->
+        @if (!collapsed()) {
+          <div class="px-3 py-1.5 group relative">
+            <div class="flex items-center gap-2 text-[10px] text-gray-400 font-mono cursor-default"
+                 [title]="'FE: ' + versionService.frontendCommit() + '\nBE: ' + versionService.backendCommit()">
+              <svg class="w-3.5 h-3.5 flex-shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              @if (versionService.frontendCommit() === versionService.backendCommit()) {
+                <a [href]="'https://github.com/mikerada6/rto-tracker/commit/' + versionService.frontendCommit()"
+                   target="_blank" rel="noopener"
+                   class="hover:text-blue-500 transition-colors">
+                  {{ versionService.abbreviate(versionService.frontendCommit()) }}
+                </a>
+              } @else {
+                <span>
+                  fe:<a [href]="'https://github.com/mikerada6/rto-tracker/commit/' + versionService.frontendCommit()"
+                        target="_blank" rel="noopener"
+                        class="hover:text-blue-500 transition-colors">{{ versionService.abbreviate(versionService.frontendCommit()) }}</a>
+                  be:<a [href]="'https://github.com/mikerada6/rto-tracker/commit/' + versionService.backendCommit()"
+                        target="_blank" rel="noopener"
+                        class="hover:text-blue-500 transition-colors">{{ versionService.abbreviate(versionService.backendCommit()) }}</a>
+                </span>
+              }
+            </div>
+          </div>
+        }
         <!-- Dark mode toggle -->
         <button
           (click)="themeService.toggle()"
@@ -132,6 +160,7 @@ export class NavSidebarComponent {
   constructor(private authService: AuthService) {}
 
   readonly themeService = inject(ThemeService);
+  readonly versionService = inject(VersionService);
 
   onLogout(): void {
     this.authService.logout();
