@@ -10,6 +10,7 @@ import {
   isSameMonth, isToday, isFuture, getISOWeek, parseISO
 } from 'date-fns';
 import { BottomSheetComponent } from '../../shared/components/bottom-sheet.component';
+import { DayTimelineBarComponent } from '../../shared/components/day-timeline-bar.component';
 import { buildSegments, buildJourneyPhases, formatSegmentDuration, TimelineSegment, JourneyPhase } from '../../core/utils/timeline.utils';
 
 interface CalendarDay {
@@ -29,7 +30,7 @@ interface CalendarDay {
 
 @Component({
   selector: 'app-calendar',
-  imports: [DatePipe, NgTemplateOutlet, DecimalPipe, BottomSheetComponent],
+  imports: [DatePipe, NgTemplateOutlet, DecimalPipe, BottomSheetComponent, DayTimelineBarComponent],
   styles: [`
     .month-slide-enter { animation: slideInRight 0.22s ease-out; }
     .month-slide-back  { animation: slideInLeft  0.22s ease-out; }
@@ -259,13 +260,18 @@ interface CalendarDay {
           </div>
 
           @if (selectedDay()!.officeDay) {
+            <!-- Timeline bar -->
+            @if (journeyPhases().length > 0) {
+              <app-day-timeline-bar [phases]="journeyPhases()" />
+            }
+
             <div class="px-5 py-4 space-y-4">
 
               <!-- Key metrics -->
-              <div class="grid grid-cols-2 gap-3">
-                <div class="bg-green-50 rounded-xl p-3">
+              <div class="grid grid-cols-3 gap-3">
+                <div class="bg-green-50 rounded-xl p-3 col-span-2">
                   <p class="text-[11px] text-green-600 font-medium uppercase tracking-wide">Time in Office</p>
-                  <p class="text-lg font-bold text-green-800 mt-0.5">{{ selectedDay()!.totalOfficeTime || '—' }}</p>
+                  <p class="text-2xl font-bold text-green-800 mt-0.5">{{ selectedDay()!.totalOfficeTime || '—' }}</p>
                 </div>
                 <div class="bg-blue-50 rounded-xl p-3">
                   <p class="text-[11px] text-blue-600 font-medium uppercase tracking-wide">Commute</p>
@@ -273,13 +279,13 @@ interface CalendarDay {
                     <div class="mt-1 space-y-0.5">
                       @if (selectedDay()!.outboundCommute) {
                         <p class="text-sm font-bold text-blue-800 flex items-center gap-1">
-                          <span class="text-[10px] font-normal opacity-60">out</span>
+                          <span class="text-[10px] font-normal opacity-60">Morning</span>
                           {{ selectedDay()!.outboundCommute }}
                         </p>
                       }
                       @if (selectedDay()!.inboundCommute) {
                         <p class="text-sm font-bold text-blue-800 flex items-center gap-1">
-                          <span class="text-[10px] font-normal opacity-60">in</span>
+                          <span class="text-[10px] font-normal opacity-60">Evening</span>
                           {{ selectedDay()!.inboundCommute }}
                         </p>
                       }
@@ -346,18 +352,21 @@ interface CalendarDay {
                           }
                         </div>
 
-                        <!-- Phase stops -->
-                        <div class="relative">
+                        <!-- Phase stops with subway-map rail -->
+                        <div class="relative pl-1">
+                          <!-- Continuous vertical rail -->
+                          <div class="absolute left-[22px] top-0 bottom-0 w-0.5 rounded-full"
+                               [class]="phaseRailBgClass(phase.type)"></div>
+
                           @for (stop of phase.stops; track $index; let isFirst = $first; let isLast = $last) {
-                            <!-- Transit connector (travel gap between stops) -->
-                            @if (stop.transitFromPrevSeconds > 30 && !stop.isImplicitArrival) {
-                              <div class="flex items-center gap-2 px-3 py-1">
-                                <div class="w-5 flex justify-center">
-                                  <div class="w-px h-4 border-l border-dashed"
+                            <!-- Transit gap pill -->
+                            @if (stop.transitFromPrevSeconds > 120 && !stop.isImplicitArrival) {
+                              <div class="flex items-center gap-2 px-3 py-1 relative">
+                                <div class="w-5 flex justify-center relative z-10">
+                                  <div class="w-0.5 h-4 border-l-2 border-dotted"
                                        [class]="phaseConnectorClass(phase.type)"></div>
                                 </div>
-                                <span class="text-[10px] italic opacity-50"
-                                      [class]="phaseHeaderTextClass(phase.type)">
+                                <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
                                   {{ formatDur(stop.transitFromPrevSeconds) }}
                                 </span>
                               </div>
@@ -365,16 +374,19 @@ interface CalendarDay {
 
                             <!-- Stop row -->
                             @if (!stop.isMicroVisit) {
-                              <div class="flex items-center gap-2 px-3"
+                              <div class="flex items-center gap-2 px-3 relative"
                                    [class]="isLast && !stop.isMicroVisit ? 'py-2.5' : 'py-1.5'">
-                                <!-- Icon/dot -->
-                                <div class="w-5 flex justify-center flex-shrink-0">
-                                  <span class="text-sm">{{ zoneTypeIcon(stop.zoneType) }}</span>
+                                <!-- Rail dot -->
+                                <div class="w-5 flex justify-center flex-shrink-0 relative z-10">
+                                  <div class="w-3 h-3 rounded-full border-2 border-white shadow-sm"
+                                       [class]="phaseRailBgClass(phase.type)"></div>
                                 </div>
 
-                                <!-- Zone name + time -->
+                                <!-- Zone icon + name + time -->
                                 <div class="flex-1 min-w-0">
-                                  <p class="text-xs font-semibold truncate text-gray-800">{{ stop.zone }}</p>
+                                  <p class="text-xs font-semibold truncate text-gray-800">
+                                    <span class="mr-1">{{ zoneTypeIcon(stop.zoneType) }}</span>{{ stop.zone }}
+                                  </p>
                                   <p class="text-[10px] text-gray-400 font-mono mt-0.5">
                                     @if (stop.isImplicitArrival) {
                                       <span class="italic not-italic">overnight →</span>
@@ -391,10 +403,10 @@ interface CalendarDay {
                                   </p>
                                 </div>
 
-                                <!-- Duration badge for meaningful stays -->
+                                <!-- Duration badge -->
                                 @if (stop.durationSeconds >= 60) {
                                   <span class="text-[11px] font-bold flex-shrink-0"
-                                        [class]="stop.zoneType === 'OFFICE' ? 'text-green-600' : 'text-gray-400'">
+                                        [class]="phaseHeaderTextClass(phase.type)">
                                     {{ formatDur(stop.durationSeconds) }}
                                   </span>
                                 }
@@ -731,6 +743,16 @@ export class CalendarComponent implements OnInit {
       case 'office':          return 'border-green-300';
       case 'evening_commute': return 'border-amber-300';
       default:                return 'border-gray-300';
+    }
+  }
+
+  phaseRailBgClass(type: string): string {
+    switch (type) {
+      case 'morning_commute': return 'bg-blue-300';
+      case 'office':          return 'bg-green-300';
+      case 'evening_commute': return 'bg-amber-300';
+      case 'home':            return 'bg-gray-300';
+      default:                return 'bg-gray-300';
     }
   }
 
