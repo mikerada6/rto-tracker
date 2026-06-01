@@ -31,6 +31,15 @@ body {
 /* Invert the gray scale so all bg-gray-*, text-gray-*, border-gray-* utilities flip automatically */
 html.dark {
   color-scheme: dark;
+
+  /* Semantic tokens */
+  --color-surface: oklch(0.205 0 0);
+  --color-surface-secondary: oklch(0.145 0 0);
+  --color-border: oklch(0.269 0 0);
+  --color-text: oklch(0.939 0 0);
+  --color-text-secondary: oklch(0.556 0 0);
+
+  /* Gray scale (full inversion) */
   --color-gray-50:  oklch(0.145 0 0);
   --color-gray-100: oklch(0.205 0 0);
   --color-gray-200: oklch(0.269 0 0);
@@ -42,6 +51,36 @@ html.dark {
   --color-gray-800: oklch(0.869 0 0);
   --color-gray-900: oklch(0.939 0 0);
   --color-gray-950: oklch(0.985 0 0);
+
+  /* Green — light tints ↔ dark tints (50→950, 100→900, 200→800, 300→700) */
+  --color-green-50:  oklch(0.266 0.065 152.934);
+  --color-green-100: oklch(0.393 0.095 152.535);
+  --color-green-200: oklch(0.448 0.119 151.328);
+  --color-green-300: oklch(0.527 0.154 150.069);
+
+  /* Blue */
+  --color-blue-50:  oklch(0.282 0.091 267.935);
+  --color-blue-100: oklch(0.379 0.146 265.522);
+  --color-blue-200: oklch(0.424 0.199 265.638);
+  --color-blue-300: oklch(0.488 0.243 264.376);
+
+  /* Red */
+  --color-red-50:  oklch(0.258 0.092 26.042);
+  --color-red-100: oklch(0.396 0.141 25.723);
+  --color-red-200: oklch(0.444 0.177 26.899);
+
+  /* Amber */
+  --color-amber-50:  oklch(0.279 0.077 45.635);
+  --color-amber-100: oklch(0.414 0.112 45.904);
+  --color-amber-200: oklch(0.473 0.137 46.201);
+  --color-amber-300: oklch(0.555 0.163 48.998);
+
+  /* Rose */
+  --color-rose-50: oklch(0.271 0.105 12.094);
+
+  /* Purple */
+  --color-purple-50:  oklch(0.291 0.149 302.717);
+  --color-purple-100: oklch(0.381 0.176 304.987);
 }
 
 /* bg-white elements become dark surface cards in dark mode */
@@ -53,6 +92,34 @@ html.dark .bg-white {
 html.dark .border-gray-100 {
   border-color: oklch(0.269 0 0);
 }
+
+/* ── Dark mode: colored text (dark shades → light for readability) ──
+   Uses :where() for low specificity so explicit dark: variants can override */
+html.dark :where(.text-green-600)  { color: oklch(0.792 0.209 151.711); }
+html.dark :where(.text-green-700)  { color: oklch(0.871 0.150 154.449); }
+html.dark :where(.text-green-800)  { color: oklch(0.925 0.084 155.995); }
+html.dark :where(.text-green-900)  { color: oklch(0.962 0.044 156.743); }
+
+html.dark :where(.text-blue-600)   { color: oklch(0.707 0.165 254.624); }
+html.dark :where(.text-blue-700)   { color: oklch(0.809 0.105 251.813); }
+html.dark :where(.text-blue-800)   { color: oklch(0.882 0.059 254.128); }
+
+html.dark :where(.text-red-600)    { color: oklch(0.704 0.191 22.216); }
+html.dark :where(.text-red-700)    { color: oklch(0.808 0.114 19.571); }
+
+html.dark :where(.text-amber-600)  { color: oklch(0.828 0.189 84.429); }
+html.dark :where(.text-amber-700)  { color: oklch(0.879 0.169 91.605); }
+html.dark :where(.text-amber-800)  { color: oklch(0.924 0.120 95.746); }
+
+html.dark :where(.text-rose-600)   { color: oklch(0.712 0.194 13.428); }
+
+html.dark :where(.text-purple-600) { color: oklch(0.714 0.203 305.504); }
+html.dark :where(.text-purple-700) { color: oklch(0.827 0.119 306.383); }
+
+/* Hover text that sits on colored surfaces */
+html.dark :where(.hover\:text-red-600):hover   { color: oklch(0.704 0.191 22.216); }
+html.dark :where(.hover\:text-red-800):hover   { color: oklch(0.885 0.062 18.334); }
+html.dark :where(.hover\:text-blue-800):hover  { color: oklch(0.882 0.059 254.128); }
 
 /* Native form elements (select, input) respect dark color scheme */
 html.dark select,

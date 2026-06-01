@@ -1,9 +1,10 @@
-import { Component, Input, OnInit, OnChanges, signal, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, OnChanges, signal, ViewChild, inject, effect } from '@angular/core';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartData } from 'chart.js';
 import { CalendarService } from '../../../core/services/calendar.service';
 import { AuditDayEntry } from '../../../core/models/audit.model';
 import { PeriodStats } from '../../../core/models/dashboard.model';
+import { ThemeService } from '../../../core/services/theme.service';
 import { startOfISOWeek, getISOWeek, format, parseISO } from 'date-fns';
 
 interface WeekBucket {
@@ -51,7 +52,17 @@ export class WeeklyBarChartComponent implements OnInit, OnChanges {
   chartData: ChartData<'bar'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'bar'>['options'] = {};
 
-  constructor(private calendarService: CalendarService) {}
+  private readonly themeService = inject(ThemeService);
+
+  constructor(private calendarService: CalendarService) {
+    effect(() => {
+      // Re-render chart when theme changes
+      this.themeService.isDark();
+      if (!this.loading() && this.chartData.labels?.length) {
+        this.loadData();
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.loadData();
@@ -109,6 +120,9 @@ export class WeeklyBarChartComponent implements OnInit, OnChanges {
 
   private buildChart(buckets: WeekBucket[]): void {
     const target = this.requiredAvg;
+    const dark = this.themeService.isDark();
+    const textColor = dark ? 'rgba(255,255,255,0.7)' : undefined;
+    const gridColor = dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
 
     const labels = buckets.map(b => b.weekLabel);
     const data = buckets.map(b => b.daysInOffice);
@@ -135,11 +149,14 @@ export class WeeklyBarChartComponent implements OnInit, OnChanges {
         y: {
           min: 0,
           max: 5,
-          ticks: { stepSize: 1 },
-          title: { display: true, text: 'Days' }
+          ticks: { stepSize: 1, color: textColor },
+          title: { display: true, text: 'Days', color: textColor },
+          grid: { color: gridColor }
         },
         x: {
-          title: { display: false }
+          title: { display: false },
+          ticks: { color: textColor },
+          grid: { color: gridColor }
         }
       }
     };

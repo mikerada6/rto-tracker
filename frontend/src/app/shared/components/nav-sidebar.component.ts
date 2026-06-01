@@ -27,7 +27,7 @@ import { VersionService } from '../../core/services/version.service';
         @for (item of navItems; track item.path) {
           <a
             [routerLink]="item.path"
-            routerLinkActive="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+            routerLinkActive="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400"
             [routerLinkActiveOptions]="{ exact: item.path === '/dashboard' }"
             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
             [title]="item.label"

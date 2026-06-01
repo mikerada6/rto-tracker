@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, signal, computed, ViewChild, ElementRef, inject, effect } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
@@ -6,6 +6,7 @@ import annotationPlugin from 'chartjs-plugin-annotation';
 import { ReportService, AvailablePeriod } from '../../core/services/report.service';
 import { QuarterReportResponse } from '../../core/models/report.model';
 import { SkeletonComponent } from '../../shared/components/skeleton.component';
+import { ThemeService } from '../../core/services/theme.service';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend, annotationPlugin);
 
@@ -163,12 +164,20 @@ export class QuarterReportComponent implements OnInit {
   });
 
   private chart: Chart | null = null;
+  private readonly themeService = inject(ThemeService);
 
   constructor(
     private reportService: ReportService,
     private route: ActivatedRoute,
     private router: Router
-  ) {}
+  ) {
+    effect(() => {
+      this.themeService.isDark();
+      if (this.report()) {
+        setTimeout(() => this.renderChart(), 0);
+      }
+    });
+  }
 
   ngOnInit(): void {
     const yearParam = this.route.snapshot.paramMap.get('year');
@@ -226,6 +235,9 @@ export class QuarterReportComponent implements OnInit {
     const r = this.report();
     if (!r || !this.barChartRef) return;
     this.chart?.destroy();
+    const dark = this.themeService.isDark();
+    const textColor = dark ? 'rgba(255,255,255,0.7)' : undefined;
+    const gridColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
     const labels = r.monthlyBreakdown.map(m => m.month);
     const data = r.monthlyBreakdown.map(m => m.daysInOffice);
     const targetAvg = r.averageDaysPerWeek;
@@ -271,8 +283,8 @@ export class QuarterReportComponent implements OnInit {
           }
         },
         scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' } },
-          x: { grid: { display: false } }
+          y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor }, grid: { color: gridColor } },
+          x: { grid: { display: false }, ticks: { color: textColor } }
         }
       }
     });

@@ -14,7 +14,7 @@ import { getComplianceStatus } from '../../../core/utils/compliance-status.util'
       <div class="relative w-48 h-48">
         <svg viewBox="0 0 120 120" class="w-full h-full -rotate-90">
           <!-- Background circle -->
-          <circle cx="60" cy="60" r="50" fill="none" stroke="#e5e7eb" stroke-width="10" />
+          <circle cx="60" cy="60" r="50" fill="none" stroke="var(--color-border)" stroke-width="10" />
           <!-- Progress arc -->
           <circle
             cx="60" cy="60" r="50"
