@@ -77,7 +77,8 @@ class OfficeDayCalculationServiceTest {
     }
 
     private ZoneEvent makeEvent(Zone zone, EventType type, int hour, int minute) {
-        Instant ts = testDate.atTime(hour, minute).toInstant(ZoneOffset.UTC);
+        ZoneId userZone = ZoneId.of(testUser.getTimezone());
+        Instant ts = testDate.atTime(hour, minute).atZone(userZone).toInstant();
         return ZoneEvent.builder()
                 .id(UUID.randomUUID())
                 .user(testUser)
@@ -115,9 +116,9 @@ class OfficeDayCalculationServiceTest {
         // 8h 30m = 30600 seconds
         assertThat(record.getTotalOfficeTime()).isEqualTo(30600L);
         assertThat(record.getFirstOfficeEntry()).isEqualTo(
-                testDate.atTime(9, 0).toInstant(ZoneOffset.UTC));
+                testDate.atTime(9, 0).atZone(ZoneId.of(testUser.getTimezone())).toInstant());
         assertThat(record.getLastOfficeExit()).isEqualTo(
-                testDate.atTime(17, 30).toInstant(ZoneOffset.UTC));
+                testDate.atTime(17, 30).atZone(ZoneId.of(testUser.getTimezone())).toInstant());
     }
 
     @Test
@@ -265,9 +266,9 @@ class OfficeDayCalculationServiceTest {
         OfficeDayRecord record = service.compute(testUser.getId(), testUser, testDate);
 
         assertThat(record.getFirstOfficeEntry()).isEqualTo(
-                testDate.atTime(9, 0).toInstant(ZoneOffset.UTC));
+                testDate.atTime(9, 0).atZone(ZoneId.of(testUser.getTimezone())).toInstant());
         assertThat(record.getLastOfficeExit()).isEqualTo(
-                testDate.atTime(18, 0).toInstant(ZoneOffset.UTC));
+                testDate.atTime(18, 0).atZone(ZoneId.of(testUser.getTimezone())).toInstant());
     }
 
     // --- Cache hit/miss ---
@@ -307,8 +308,9 @@ class OfficeDayCalculationServiceTest {
     }
 
     private void stubEvents(List<ZoneEvent> events) {
-        Instant dayStart = testDate.atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant dayEnd = testDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        ZoneId userZone = ZoneId.of(testUser.getTimezone());
+        Instant dayStart = testDate.atStartOfDay(userZone).toInstant();
+        Instant dayEnd = testDate.plusDays(1).atStartOfDay(userZone).toInstant();
         when(eventRepository.findByUserIdAndTimestampRange(testUser.getId(), dayStart, dayEnd))
                 .thenReturn(events);
     }
