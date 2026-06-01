@@ -570,7 +570,7 @@ export class CalendarComponent implements OnInit {
     this.route.paramMap.subscribe(params => {
       const dateParam = params.get('date');
       if (dateParam) {
-        const parsed = new Date(dateParam);
+        const parsed = new Date(dateParam + 'T00:00:00');
         if (!isSameMonth(parsed, this.currentMonth())) {
           this.currentMonth.set(parsed);
           this.loadMonth();
