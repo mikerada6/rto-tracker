@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rto.tracker.domain.*;
 import com.rto.tracker.dto.CreateEventRequest;
 import com.rto.tracker.dto.UpdateUserRequest;
+import com.rto.tracker.repository.InviteCodeRepository;
 import com.rto.tracker.repository.OfficeDayRecordRepository;
 import com.rto.tracker.repository.UserRepository;
 import com.rto.tracker.repository.ZoneEventRepository;
@@ -49,12 +50,16 @@ class Phase4IntegrationTest {
     @Autowired
     private OfficeDayRecordRepository officeDayRecordRepository;
 
+    @Autowired
+    private InviteCodeRepository inviteCodeRepository;
+
     private String apiKey;
     private User testUser;
     private Zone testZone;
 
     @BeforeEach
     void setUp() {
+        inviteCodeRepository.deleteAll();
         officeDayRecordRepository.deleteAll();
         eventRepository.deleteAll();
         zoneRepository.deleteAll();

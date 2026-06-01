@@ -1,6 +1,7 @@
 package com.rto.tracker.controller;
 
 import com.rto.tracker.domain.*;
+import com.rto.tracker.repository.InviteCodeRepository;
 import com.rto.tracker.repository.OfficeDayRecordRepository;
 import com.rto.tracker.repository.UserRepository;
 import com.rto.tracker.repository.ZoneEventRepository;
@@ -40,6 +41,9 @@ class DashboardControllerIntegrationTest {
     @Autowired
     private OfficeDayRecordRepository officeDayRecordRepository;
 
+    @Autowired
+    private InviteCodeRepository inviteCodeRepository;
+
     private String apiKey;
     private User testUser;
     private Zone homeZone;
@@ -47,6 +51,7 @@ class DashboardControllerIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        inviteCodeRepository.deleteAll();
         officeDayRecordRepository.deleteAll();
         eventRepository.deleteAll();
         zoneRepository.deleteAll();

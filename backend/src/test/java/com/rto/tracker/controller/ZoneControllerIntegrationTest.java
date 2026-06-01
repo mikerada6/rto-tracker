@@ -5,6 +5,7 @@ import com.rto.tracker.domain.User;
 import com.rto.tracker.domain.ZoneType;
 import com.rto.tracker.dto.CreateZoneRequest;
 import com.rto.tracker.dto.UpdateZoneRequest;
+import com.rto.tracker.repository.InviteCodeRepository;
 import com.rto.tracker.repository.OfficeDayRecordRepository;
 import com.rto.tracker.repository.UserRepository;
 import com.rto.tracker.repository.ZoneEventRepository;
@@ -49,11 +50,15 @@ class ZoneControllerIntegrationTest {
     @Autowired
     private OfficeDayRecordRepository officeDayRecordRepository;
 
+    @Autowired
+    private InviteCodeRepository inviteCodeRepository;
+
     private String apiKey;
     private User testUser;
 
     @BeforeEach
     void setUp() {
+        inviteCodeRepository.deleteAll();
         officeDayRecordRepository.deleteAll();
         eventRepository.deleteAll();
         zoneRepository.deleteAll();
