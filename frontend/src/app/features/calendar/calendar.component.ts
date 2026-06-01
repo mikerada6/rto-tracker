@@ -10,7 +10,7 @@ import {
   isSameMonth, isToday, isFuture, getISOWeek, parseISO
 } from 'date-fns';
 import { BottomSheetComponent } from '../../shared/components/bottom-sheet.component';
-import { buildSegments, formatSegmentDuration, TimelineSegment } from '../../core/utils/timeline.utils';
+import { buildSegments, buildJourneyPhases, formatSegmentDuration, TimelineSegment, JourneyPhase } from '../../core/utils/timeline.utils';
 
 interface CalendarDay {
   date: Date;
@@ -290,66 +290,14 @@ interface CalendarDay {
                 </div>
               </div>
 
-              <!-- Entry / Exit / Office row -->
-              <div class="flex items-center gap-2 text-sm">
-                @if (selectedDay()!.firstOfficeEntry) {
-                  <div class="flex-1 bg-gray-50 rounded-lg px-3 py-2 text-center">
-                    <p class="text-[10px] text-gray-400 uppercase tracking-wide font-medium">In</p>
-                    <p class="font-mono font-bold text-gray-800 text-sm">
-                      {{ selectedDay()!.firstOfficeEntry | date:'HH:mm' }}
-                    </p>
-                  </div>
-                }
-                @if (selectedDay()!.firstOfficeEntry && selectedDay()!.lastOfficeExit) {
-                  <!-- duration bar -->
-                  <div class="flex-1 text-center">
-                    <div class="h-1 bg-green-200 rounded-full relative">
-                      <div class="absolute inset-0 bg-green-500 rounded-full"></div>
-                    </div>
-                    <p class="text-[10px] text-gray-400 mt-1">{{ selectedDay()!.totalOfficeTime }}</p>
-                  </div>
-                }
-                @if (selectedDay()!.lastOfficeExit) {
-                  <div class="flex-1 bg-gray-50 rounded-lg px-3 py-2 text-center">
-                    <p class="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Out</p>
-                    <p class="font-mono font-bold text-gray-800 text-sm">
-                      {{ selectedDay()!.lastOfficeExit | date:'HH:mm' }}
-                    </p>
-                  </div>
-                }
-              </div>
-
-              <!-- Office name -->
-              @if (selectedDay()!.officesVisited.length > 0) {
-                <div class="flex items-center gap-2 text-sm text-gray-600">
-                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-                  </svg>
-                  <span>{{ selectedDay()!.officesVisited.join(', ') }}</span>
-                </div>
-              }
-
-              <!-- Commute route -->
-              @if (selectedDay()!.commuteRoute) {
-                <div class="flex items-start gap-2 text-sm text-gray-600">
-                  <svg class="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  </svg>
-                  <span class="text-xs leading-relaxed">{{ selectedDay()!.commuteRoute }}</span>
-                </div>
-              }
-
-              <!-- Event timeline -->
-              @if (selectedDay()!.events.length > 0) {
-                <div class="border-t border-gray-50 pt-3">
-                  <div class="flex items-center justify-between mb-3">
-                    <h4 class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Zone Timeline</h4>
+              <!-- Journey phases -->
+              @if (journeyPhases().length > 0) {
+                <div class="border-t border-gray-50 pt-3 space-y-3">
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Journey</h4>
                     <button (click)="toggleRawEvents()"
                       class="text-[10px] text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-2">
-                      {{ showRawEvents() ? 'Show clean' : 'Show raw' }}
+                      {{ showRawEvents() ? 'Journey view' : 'Raw events' }}
                     </button>
                   </div>
 
@@ -375,82 +323,87 @@ interface CalendarDay {
                       </div>
                     </div>
                   } @else {
-                    <!-- Segmented clean view -->
-                    <div class="space-y-1.5">
-                      @for (seg of daySegments(); track $index) {
-                        @if (seg.isImplicitArrival) {
-                          <!-- Overnight home departure — show as real card with "overnight" label -->
-                          <div class="rounded-xl overflow-hidden border"
-                               [class]="segmentBorderClass(seg.zoneType)">
-                            <div class="flex items-center gap-2.5 px-3 py-2.5"
-                                 [class]="segmentBgClass(seg.zoneType)">
-                              <span class="text-base flex-shrink-0">{{ zoneTypeIcon(seg.zoneType) }}</span>
-                              <div class="flex-1 min-w-0">
-                                <p class="text-xs font-semibold truncate"
-                                   [class]="segmentTextClass(seg.zoneType)">{{ seg.zone }}</p>
-                                <p class="text-[10px] mt-0.5 flex items-center gap-1"
-                                   [class]="segmentSubTextClass(seg.zoneType)">
-                                  <span class="opacity-60 italic">overnight</span>
-                                  <span class="opacity-50">→</span>
-                                  <span class="font-mono">{{ seg.departureTime | date:'HH:mm' }}</span>
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        } @else if (seg.isMicroVisit) {
-                          <!-- Micro-visit: compact dim row -->
-                          <div class="flex items-center gap-2 py-1 px-2 rounded-lg opacity-40">
-                            <span class="text-[13px] flex-shrink-0">{{ zoneTypeIcon(seg.zoneType) }}</span>
-                            <span class="font-mono text-[10px] text-gray-400 flex-shrink-0 w-10">
-                              {{ seg.arrivalTime | date:'HH:mm' }}
+                    <!-- Journey view -->
+                    @for (phase of journeyPhases(); track $index) {
+                      <div class="rounded-xl border overflow-hidden"
+                           [class]="phaseContainerClass(phase.type)">
+
+                        <!-- Phase header -->
+                        <div class="flex items-center justify-between px-3 py-2"
+                             [class]="phaseHeaderBgClass(phase.type)">
+                          <div class="flex items-center gap-2">
+                            <span class="text-sm">{{ phaseIcon(phase.type) }}</span>
+                            <span class="text-[11px] font-semibold uppercase tracking-wide"
+                                  [class]="phaseHeaderTextClass(phase.type)">
+                              {{ phase.label }}
                             </span>
-                            <span class="text-[10px] text-gray-400 truncate italic">{{ seg.zone }}</span>
-                            <span class="ml-auto text-[10px] text-gray-400 flex-shrink-0">~brief</span>
                           </div>
-                        } @else {
-                          <!-- Normal segment -->
-                          <div class="rounded-xl overflow-hidden border"
-                               [class]="segmentBorderClass(seg.zoneType)">
-                            <div class="flex items-center gap-2.5 px-3 py-2.5"
-                                 [class]="segmentBgClass(seg.zoneType)">
-                              <span class="text-base flex-shrink-0">{{ zoneTypeIcon(seg.zoneType) }}</span>
-                              <div class="flex-1 min-w-0">
-                                <p class="text-xs font-semibold truncate"
-                                   [class]="segmentTextClass(seg.zoneType)">{{ seg.zone }}</p>
-                                <p class="text-[10px] mt-0.5 flex items-center gap-1"
-                                   [class]="segmentSubTextClass(seg.zoneType)">
-                                  <span class="font-mono">{{ seg.arrivalTime | date:'HH:mm' }}</span>
-                                  @if (seg.departureTime) {
-                                    <span class="opacity-50">→</span>
-                                    <span class="font-mono">{{ seg.departureTime | date:'HH:mm' }}</span>
-                                  } @else {
-                                    <span class="opacity-60 italic">ongoing</span>
-                                  }
-                                </p>
-                              </div>
-                              @if (seg.durationSeconds > 0) {
-                                <div class="flex-shrink-0 text-right">
-                                  <span class="text-xs font-bold"
-                                        [class]="segmentTextClass(seg.zoneType)">
-                                    {{ formatDur(seg.durationSeconds) }}
-                                  </span>
+                          @if (phase.totalDurationSeconds > 0) {
+                            <span class="text-xs font-bold"
+                                  [class]="phaseHeaderTextClass(phase.type)">
+                              {{ formatDur(phase.totalDurationSeconds) }}
+                            </span>
+                          }
+                        </div>
+
+                        <!-- Phase stops -->
+                        <div class="relative">
+                          @for (stop of phase.stops; track $index; let isFirst = $first; let isLast = $last) {
+                            <!-- Transit connector (travel gap between stops) -->
+                            @if (stop.transitFromPrevSeconds > 30 && !stop.isImplicitArrival) {
+                              <div class="flex items-center gap-2 px-3 py-1">
+                                <div class="w-5 flex justify-center">
+                                  <div class="w-px h-4 border-l border-dashed"
+                                       [class]="phaseConnectorClass(phase.type)"></div>
                                 </div>
-                              }
-                            </div>
-                            <!-- Duration bar -->
-                            @if (seg.durationSeconds > 60 && dayMaxSegmentSeconds() > 0) {
-                              <div class="h-0.5 w-full"
-                                   [class]="segmentBarBgClass(seg.zoneType)">
-                                <div class="h-full transition-all duration-500"
-                                     [class]="segmentBarFillClass(seg.zoneType)"
-                                     [style.width.%]="(seg.durationSeconds / dayMaxSegmentSeconds()) * 100">
-                                </div>
+                                <span class="text-[10px] italic opacity-50"
+                                      [class]="phaseHeaderTextClass(phase.type)">
+                                  {{ formatDur(stop.transitFromPrevSeconds) }}
+                                </span>
                               </div>
                             }
-                          </div>
-                        }
-                      }
-                    </div>
+
+                            <!-- Stop row -->
+                            @if (!stop.isMicroVisit) {
+                              <div class="flex items-center gap-2 px-3"
+                                   [class]="isLast && !stop.isMicroVisit ? 'py-2.5' : 'py-1.5'">
+                                <!-- Icon/dot -->
+                                <div class="w-5 flex justify-center flex-shrink-0">
+                                  <span class="text-sm">{{ zoneTypeIcon(stop.zoneType) }}</span>
+                                </div>
+
+                                <!-- Zone name + time -->
+                                <div class="flex-1 min-w-0">
+                                  <p class="text-xs font-semibold truncate text-gray-800">{{ stop.zone }}</p>
+                                  <p class="text-[10px] text-gray-400 font-mono mt-0.5">
+                                    @if (stop.isImplicitArrival) {
+                                      <span class="italic not-italic">overnight →</span>
+                                      {{ stop.departureTime | date:'HH:mm' }}
+                                    } @else {
+                                      {{ stop.arrivalTime | date:'HH:mm' }}
+                                      @if (stop.departureTime && stop.durationSeconds > 0) {
+                                        <span class="text-gray-300"> → </span>
+                                        {{ stop.departureTime | date:'HH:mm' }}
+                                      } @else if (!stop.departureTime) {
+                                        <span class="italic text-gray-300"> ongoing</span>
+                                      }
+                                    }
+                                  </p>
+                                </div>
+
+                                <!-- Duration badge for meaningful stays -->
+                                @if (stop.durationSeconds >= 60) {
+                                  <span class="text-[11px] font-bold flex-shrink-0"
+                                        [class]="stop.zoneType === 'OFFICE' ? 'text-green-600' : 'text-gray-400'">
+                                    {{ formatDur(stop.durationSeconds) }}
+                                  </span>
+                                }
+                              </div>
+                            }
+                          }
+                        </div>
+                      </div>
+                    }
                   }
                 </div>
               }
@@ -589,6 +542,12 @@ export class CalendarComponent implements OnInit {
     return Math.max(...segs.map(s => s.durationSeconds));
   });
 
+  readonly journeyPhases = computed((): JourneyPhase[] => {
+    const segs = this.daySegments();
+    if (!segs.length) return [];
+    return buildJourneyPhases(segs);
+  });
+
   constructor(
     private calendarService: CalendarService,
     private route: ActivatedRoute,
@@ -724,6 +683,55 @@ export class CalendarComponent implements OnInit {
 
   formatDur(seconds: number): string {
     return formatSegmentDuration(seconds);
+  }
+
+  phaseIcon(type: string): string {
+    switch (type) {
+      case 'morning_commute': return '🌅';
+      case 'office':          return '🏢';
+      case 'evening_commute': return '🌇';
+      case 'home':            return '🏠';
+      default:                return '📍';
+    }
+  }
+
+  phaseContainerClass(type: string): string {
+    switch (type) {
+      case 'morning_commute': return 'border-blue-200';
+      case 'office':          return 'border-green-200';
+      case 'evening_commute': return 'border-amber-200';
+      case 'home':            return 'border-gray-200';
+      default:                return 'border-gray-200';
+    }
+  }
+
+  phaseHeaderBgClass(type: string): string {
+    switch (type) {
+      case 'morning_commute': return 'bg-blue-50';
+      case 'office':          return 'bg-green-50';
+      case 'evening_commute': return 'bg-amber-50';
+      case 'home':            return 'bg-gray-50';
+      default:                return 'bg-gray-50';
+    }
+  }
+
+  phaseHeaderTextClass(type: string): string {
+    switch (type) {
+      case 'morning_commute': return 'text-blue-700';
+      case 'office':          return 'text-green-700';
+      case 'evening_commute': return 'text-amber-700';
+      case 'home':            return 'text-gray-600';
+      default:                return 'text-gray-600';
+    }
+  }
+
+  phaseConnectorClass(type: string): string {
+    switch (type) {
+      case 'morning_commute': return 'border-blue-300';
+      case 'office':          return 'border-green-300';
+      case 'evening_commute': return 'border-amber-300';
+      default:                return 'border-gray-300';
+    }
   }
 
   prevMonth(): void {
