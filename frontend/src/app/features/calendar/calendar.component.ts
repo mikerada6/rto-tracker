@@ -173,9 +173,6 @@ interface CalendarDay {
                   </button>
                 }
 
-                <!-- Week office-day counter badge -->
-                <div class="flex items-center justify-center lg:hidden">
-                </div>
               }
             </div>
           }
@@ -528,8 +525,12 @@ export class CalendarComponent implements OnInit {
     let workWeekdayCount = 0;
 
     const monthStart = startOfMonth(month);
-    const monthEnd = endOfMonth(month);
-    eachDayOfInterval({ start: monthStart, end: monthEnd }).forEach(d => {
+    const today = new Date();
+    // Only count up to today if viewing the current month, otherwise count the full month
+    const countEnd = isSameMonth(month, today) && !isFuture(monthStart)
+      ? today
+      : endOfMonth(month);
+    eachDayOfInterval({ start: monthStart, end: countEnd }).forEach(d => {
       const dow = getDay(d);
       if (dow !== 0 && dow !== 6) workWeekdayCount++;
       const dateStr = format(d, 'yyyy-MM-dd');
