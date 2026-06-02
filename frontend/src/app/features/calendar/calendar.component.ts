@@ -268,7 +268,11 @@ interface CalendarDay {
               <div class="grid grid-cols-3 gap-3">
                 <div class="bg-green-50 rounded-xl p-3 col-span-2">
                   <p class="text-[11px] text-green-600 font-medium uppercase tracking-wide">Time in Office</p>
-                  <p class="text-2xl font-bold text-green-800 mt-0.5">{{ selectedDay()!.totalOfficeTime || '—' }}</p>
+                  @if (officeOngoing()) {
+                    <p class="text-2xl font-bold text-green-800 mt-0.5">In progress<span class="text-sm font-normal text-green-500 ml-1.5">🟢</span></p>
+                  } @else {
+                    <p class="text-2xl font-bold text-green-800 mt-0.5">{{ selectedDay()!.totalOfficeTime || '—' }}</p>
+                  }
                 </div>
                 <div class="bg-blue-50 rounded-xl p-3">
                   <p class="text-[11px] text-blue-600 font-medium uppercase tracking-wide">Commute</p>
@@ -386,8 +390,7 @@ interface CalendarDay {
                                   </p>
                                   <p class="text-[10px] text-gray-400 font-mono mt-0.5">
                                     @if (stop.isImplicitArrival) {
-                                      <span class="italic not-italic">overnight →</span>
-                                      {{ stop.departureTime | date:'HH:mm' }}
+                                      <span class="italic text-gray-300">departed </span>{{ stop.departureTime | date:'HH:mm' }}
                                     } @else {
                                       {{ stop.arrivalTime | date:'HH:mm' }}
                                       @if (stop.departureTime && stop.durationSeconds > 0) {
@@ -409,6 +412,19 @@ interface CalendarDay {
                                 }
                               </div>
                             }
+                          }
+
+                          <!-- Trailing transit gap (e.g. walk from last commute stop to office) -->
+                          @if (phase.trailingTransitSeconds > 120) {
+                            <div class="flex items-center gap-2 px-3 py-1 relative">
+                              <div class="w-5 flex justify-center relative z-10">
+                                <div class="w-0.5 h-4 border-l-2 border-dotted"
+                                     [class]="phaseConnectorClass(phase.type)"></div>
+                              </div>
+                              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                                {{ formatDur(phase.trailingTransitSeconds) }}
+                              </span>
+                            </div>
                           }
                         </div>
                       </div>
@@ -559,6 +575,11 @@ export class CalendarComponent implements OnInit {
     const segs = this.daySegments();
     if (!segs.length) return [];
     return buildJourneyPhases(segs);
+  });
+
+  /** True when the user is currently at the office (no departure yet) */
+  readonly officeOngoing = computed((): boolean => {
+    return this.daySegments().some(s => s.zoneType === 'OFFICE' && !s.isMicroVisit && s.departureTime === null);
   });
 
   constructor(

@@ -161,6 +161,8 @@ export interface JourneyPhase {
   totalDurationSeconds: number;
   /** Total transit time between stops within this phase */
   totalTransitSeconds: number;
+  /** Transit gap after the last stop (to the next phase) */
+  trailingTransitSeconds: number;
 }
 
 /**
@@ -188,25 +190,24 @@ export function buildJourneyPhases(segments: TimelineSegment[]): JourneyPhase[] 
   const phases: JourneyPhase[] = [];
 
   // Morning commute: everything before first office entry
+  // Include the transit gap from last commute stop to office as trailing transit
   if (firstOfficeIdx > 0) {
     const morningSegs = segments.slice(0, firstOfficeIdx);
-    phases.push(buildPhase('morning_commute', 'Morning Commute', morningSegs));
-  }
-
-  // Office: all segments from first office entry to last office exit (inclusive)
-  // Include cross-phase transit from the last morning commute stop
-  const officeSegs = segments.slice(firstOfficeIdx, lastOfficeIdx + 1);
-  const officePhase = buildPhase('office', 'At Office', officeSegs);
-  if (firstOfficeIdx > 0 && officePhase.stops.length > 0) {
+    const morningPhase = buildPhase('morning_commute', 'Morning Commute', morningSegs);
     const prevSeg = segments[firstOfficeIdx - 1];
     const officeSeg = segments[firstOfficeIdx];
     if (prevSeg.departureTime && officeSeg.arrivalTime) {
-      officePhase.stops[0].transitFromPrevSeconds =
+      morningPhase.trailingTransitSeconds =
         Math.max(0, (officeSeg.arrivalTime.getTime() - prevSeg.departureTime.getTime()) / 1000);
-      officePhase.totalTransitSeconds += officePhase.stops[0].transitFromPrevSeconds;
-      officePhase.totalDurationSeconds += officePhase.stops[0].transitFromPrevSeconds;
+      morningPhase.totalDurationSeconds += morningPhase.trailingTransitSeconds;
+      morningPhase.totalTransitSeconds += morningPhase.trailingTransitSeconds;
     }
+    phases.push(morningPhase);
   }
+
+  // Office: all segments from first office entry to last office exit (inclusive)
+  const officeSegs = segments.slice(firstOfficeIdx, lastOfficeIdx + 1);
+  const officePhase = buildPhase('office', 'At Office', officeSegs);
   phases.push(officePhase);
 
   // Evening commute: everything after last office exit
@@ -263,7 +264,7 @@ function buildPhase(type: JourneyPhaseType, label: string, segments: TimelineSeg
   }
   totalDuration += totalTransit;
 
-  return { type, label, stops, startTime, endTime, totalDurationSeconds: totalDuration, totalTransitSeconds: totalTransit };
+  return { type, label, stops, startTime, endTime, totalDurationSeconds: totalDuration, totalTransitSeconds: totalTransit, trailingTransitSeconds: 0 };
 }
 
 function findLastIndex<T>(arr: T[], predicate: (item: T) => boolean): number {
