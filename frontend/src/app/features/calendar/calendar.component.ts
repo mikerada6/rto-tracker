@@ -353,43 +353,54 @@ interface CalendarDay {
                           }
                         </div>
 
-                        <!-- Phase stops with subway-map rail -->
-                        <div class="relative pl-1">
-                          <!-- Continuous vertical rail -->
-                          <div class="absolute left-[22px] top-0 bottom-0 w-0.5 rounded-full"
-                               [class]="phaseRailBgClass(phase.type)"></div>
-
+                        <!-- Phase stops with subway-map rail (inline segments — rail is bounded by first & last dot) -->
+                        <div class="py-1">
                           @for (stop of phase.stops; track $index; let isFirst = $first; let isLast = $last) {
-                            <!-- Transit gap pill -->
-                            @if (stop.transitFromPrevSeconds > 120 && !stop.isImplicitArrival) {
-                              <div class="flex items-center gap-2 px-3 py-1 relative">
-                                <div class="w-5 flex justify-center relative z-10">
-                                  <div class="w-0.5 h-4 border-l-2 border-dotted"
-                                       [class]="phaseConnectorClass(phase.type)"></div>
-                                </div>
-                                <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  {{ formatDur(stop.transitFromPrevSeconds) }}
-                                </span>
-                              </div>
-                            }
-
-                            <!-- Stop row -->
                             @if (!stop.isMicroVisit) {
-                              <div class="flex items-center gap-2 px-3 relative"
-                                   [class]="isLast && !stop.isMicroVisit ? 'py-2.5' : 'py-1.5'">
-                                <!-- Rail dot -->
-                                <div class="w-5 flex justify-center flex-shrink-0 relative z-10">
-                                  <div class="w-3 h-3 rounded-full border-2 border-white shadow-sm"
-                                       [class]="phaseRailBgClass(phase.type)"></div>
+                              <!-- Rail / transit row between stops -->
+                              @if (!isFirst) {
+                                @if (stop.transitFromPrevSeconds > 120) {
+                                  <div class="flex items-center gap-2 px-3 py-1">
+                                    <div class="w-5 flex justify-center flex-shrink-0">
+                                      <div class="w-0.5 h-4 border-l-2 border-dotted"
+                                           [class]="phaseConnectorClass(phase.type)"></div>
+                                    </div>
+                                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                                      {{ formatDur(stop.transitFromPrevSeconds) }}
+                                    </span>
+                                  </div>
+                                } @else {
+                                  <div class="flex px-3">
+                                    <div class="w-5 flex justify-center flex-shrink-0">
+                                      <div class="w-0.5 h-3" [class]="phaseRailBgClass(phase.type)"></div>
+                                    </div>
+                                  </div>
+                                }
+                              }
+
+                              <!-- Stop row -->
+                              <div class="flex items-center gap-2 px-3"
+                                   [class]="isLast ? 'py-2.5' : 'py-1.5'">
+                                <div class="w-5 flex justify-center flex-shrink-0">
+                                  @if (stop.isPhaseEndpoint) {
+                                    <div class="w-3 h-3 rounded-full border-2 bg-white"
+                                         [class]="phaseRailBorderClass(phase.type)"></div>
+                                  } @else {
+                                    <div class="w-3 h-3 rounded-full border-2 border-white shadow-sm"
+                                         [class]="phaseRailBgClass(phase.type)"></div>
+                                  }
                                 </div>
 
-                                <!-- Zone icon + name + time -->
                                 <div class="flex-1 min-w-0">
                                   <p class="text-xs font-semibold truncate text-gray-800">
                                     <span class="mr-1">{{ zoneTypeIcon(stop.zoneType) }}</span>{{ stop.zone }}
                                   </p>
                                   <p class="text-[10px] text-gray-400 font-mono mt-0.5">
-                                    @if (stop.isImplicitArrival) {
+                                    @if (stop.isPhaseEndpoint && isLast) {
+                                      <span class="italic text-gray-300">arrived </span>{{ stop.arrivalTime | date:'HH:mm' }}
+                                    } @else if (stop.isPhaseEndpoint && isFirst) {
+                                      <span class="italic text-gray-300">departed </span>{{ stop.departureTime | date:'HH:mm' }}
+                                    } @else if (stop.isImplicitArrival) {
                                       <span class="italic text-gray-300">departed </span>{{ stop.departureTime | date:'HH:mm' }}
                                     } @else {
                                       {{ stop.arrivalTime | date:'HH:mm' }}
@@ -403,8 +414,7 @@ interface CalendarDay {
                                   </p>
                                 </div>
 
-                                <!-- Duration badge -->
-                                @if (stop.durationSeconds >= 60) {
+                                @if (stop.durationSeconds >= 60 && !stop.isPhaseEndpoint) {
                                   <span class="text-[11px] font-bold flex-shrink-0"
                                         [class]="phaseHeaderTextClass(phase.type)">
                                     {{ formatDur(stop.durationSeconds) }}
@@ -412,19 +422,6 @@ interface CalendarDay {
                                 }
                               </div>
                             }
-                          }
-
-                          <!-- Trailing transit gap (e.g. walk from last commute stop to office) -->
-                          @if (phase.trailingTransitSeconds > 120) {
-                            <div class="flex items-center gap-2 px-3 py-1 relative">
-                              <div class="w-5 flex justify-center relative z-10">
-                                <div class="w-0.5 h-4 border-l-2 border-dotted"
-                                     [class]="phaseConnectorClass(phase.type)"></div>
-                              </div>
-                              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                {{ formatDur(phase.trailingTransitSeconds) }}
-                              </span>
-                            </div>
                           }
                         </div>
                       </div>
@@ -775,6 +772,16 @@ export class CalendarComponent implements OnInit {
       case 'evening_commute': return 'bg-amber-300';
       case 'home':            return 'bg-gray-300';
       default:                return 'bg-gray-300';
+    }
+  }
+
+  phaseRailBorderClass(type: string): string {
+    switch (type) {
+      case 'morning_commute': return 'border-blue-300';
+      case 'office':          return 'border-green-300';
+      case 'evening_commute': return 'border-amber-300';
+      case 'home':            return 'border-gray-300';
+      default:                return 'border-gray-300';
     }
   }
 

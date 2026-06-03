@@ -150,6 +150,13 @@ export interface JourneyStop {
   transitFromPrevSeconds: number;
   isImplicitArrival: boolean;
   isMicroVisit: boolean;
+  /**
+   * True when this stop represents a phase boundary terminus — the office
+   * shown as morning destination, or as evening origin. Endpoint stops
+   * render as hollow markers, show a single timestamp (arrived/departed),
+   * and contribute no duration of their own.
+   */
+  isPhaseEndpoint?: boolean;
 }
 
 export interface JourneyPhase {
@@ -167,64 +174,98 @@ export interface JourneyPhase {
 
 /**
  * Groups timeline segments into journey phases:
- *   1. Morning commute — everything from initial home departure to first office entry
- *   2. Office — time spent at office zone(s)
- *   3. Evening commute — everything from last office exit to arriving home
- *   4. Home — remaining time at home (if any trailing segments)
+ *   1. Morning commute — home → train(s) → office (office shown as destination endpoint)
+ *   2. At Office — time spent at office zone(s); preserves mid-day breaks (e.g. lunch
+ *      out) as middle stops, but the phase total counts only office-typed durations.
+ *   3. Evening commute — office (origin endpoint) → train(s) → home
  *
- * Transit gaps (time between exiting one zone and entering the next) are
- * computed and attached to each stop as transitFromPrevSeconds.
+ * Endpoint stops (office at the end of morning, office at the start of evening) are
+ * synthesized so the rail visually starts at Home and ends at Home, with the office
+ * acting as the connector between phases.
  */
 export function buildJourneyPhases(segments: TimelineSegment[]): JourneyPhase[] {
   if (!segments.length) return [];
 
-  // Find key transition indices
   const firstOfficeIdx = segments.findIndex(s => s.zoneType === 'OFFICE' && !s.isMicroVisit);
   const lastOfficeIdx = findLastIndex(segments, s => s.zoneType === 'OFFICE' && !s.isMicroVisit);
 
-  // If no office visit, return all segments as a single "other" phase
   if (firstOfficeIdx === -1) {
     return [buildPhase('other', 'Activity', segments)];
   }
 
   const phases: JourneyPhase[] = [];
+  const firstOfficeSeg = segments[firstOfficeIdx];
+  const lastOfficeSeg = segments[lastOfficeIdx];
 
-  // Morning commute: everything before first office entry
-  // Include the transit gap from last commute stop to office as trailing transit
+  // ── Morning Commute ──
   if (firstOfficeIdx > 0) {
     const morningSegs = segments.slice(0, firstOfficeIdx);
     const morningPhase = buildPhase('morning_commute', 'Morning Commute', morningSegs);
+
     const prevSeg = segments[firstOfficeIdx - 1];
-    const officeSeg = segments[firstOfficeIdx];
-    if (prevSeg.departureTime && officeSeg.arrivalTime) {
-      morningPhase.trailingTransitSeconds =
-        Math.max(0, (officeSeg.arrivalTime.getTime() - prevSeg.departureTime.getTime()) / 1000);
-      morningPhase.totalDurationSeconds += morningPhase.trailingTransitSeconds;
-      morningPhase.totalTransitSeconds += morningPhase.trailingTransitSeconds;
-    }
+    const officeArrivalTransit = prevSeg.departureTime
+      ? Math.max(0, (firstOfficeSeg.arrivalTime.getTime() - prevSeg.departureTime.getTime()) / 1000)
+      : 0;
+
+    morningPhase.stops.push({
+      zone: firstOfficeSeg.zone,
+      zoneType: firstOfficeSeg.zoneType,
+      arrivalTime: firstOfficeSeg.arrivalTime,
+      departureTime: null,
+      durationSeconds: 0,
+      transitFromPrevSeconds: officeArrivalTransit,
+      isImplicitArrival: false,
+      isMicroVisit: false,
+      isPhaseEndpoint: true,
+    });
+    morningPhase.totalDurationSeconds += officeArrivalTransit;
+    morningPhase.totalTransitSeconds += officeArrivalTransit;
+    morningPhase.endTime = firstOfficeSeg.arrivalTime;
+
     phases.push(morningPhase);
   }
 
-  // Office: all segments from first office entry to last office exit (inclusive)
+  // ── At Office ──
+  // Preserves any mid-day non-office segments (lunch out) as visible stops,
+  // but the phase total counts only office-typed time.
   const officeSegs = segments.slice(firstOfficeIdx, lastOfficeIdx + 1);
   const officePhase = buildPhase('office', 'At Office', officeSegs);
+  officePhase.totalDurationSeconds = officeSegs
+    .filter(s => s.zoneType === 'OFFICE' && !s.isMicroVisit)
+    .reduce((sum, s) => sum + s.durationSeconds, 0);
   phases.push(officePhase);
 
-  // Evening commute: everything after last office exit
-  // Include cross-phase transit from the last office stop
+  // ── Evening Commute ──
   if (lastOfficeIdx < segments.length - 1) {
     const eveningSegs = segments.slice(lastOfficeIdx + 1);
     const eveningPhase = buildPhase('evening_commute', 'Evening Commute', eveningSegs);
+
+    const firstEveningSeg = eveningSegs[0];
+    const officeDepartureTransit = lastOfficeSeg.departureTime && firstEveningSeg.arrivalTime
+      ? Math.max(0, (firstEveningSeg.arrivalTime.getTime() - lastOfficeSeg.departureTime.getTime()) / 1000)
+      : 0;
+
     if (eveningPhase.stops.length > 0) {
-      const prevSeg = segments[lastOfficeIdx];
-      const firstEveningSeg = segments[lastOfficeIdx + 1];
-      if (prevSeg.departureTime && firstEveningSeg.arrivalTime) {
-        eveningPhase.stops[0].transitFromPrevSeconds =
-          Math.max(0, (firstEveningSeg.arrivalTime.getTime() - prevSeg.departureTime.getTime()) / 1000);
-        eveningPhase.totalTransitSeconds += eveningPhase.stops[0].transitFromPrevSeconds;
-        eveningPhase.totalDurationSeconds += eveningPhase.stops[0].transitFromPrevSeconds;
-      }
+      eveningPhase.stops[0].transitFromPrevSeconds = officeDepartureTransit;
     }
+
+    eveningPhase.stops.unshift({
+      zone: lastOfficeSeg.zone,
+      zoneType: lastOfficeSeg.zoneType,
+      arrivalTime: lastOfficeSeg.departureTime ?? lastOfficeSeg.arrivalTime,
+      departureTime: lastOfficeSeg.departureTime,
+      durationSeconds: 0,
+      transitFromPrevSeconds: 0,
+      isImplicitArrival: false,
+      isMicroVisit: false,
+      isPhaseEndpoint: true,
+    });
+    eveningPhase.totalDurationSeconds += officeDepartureTransit;
+    eveningPhase.totalTransitSeconds += officeDepartureTransit;
+    if (lastOfficeSeg.departureTime) {
+      eveningPhase.startTime = lastOfficeSeg.departureTime;
+    }
+
     phases.push(eveningPhase);
   }
 
