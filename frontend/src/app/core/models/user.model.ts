@@ -6,6 +6,7 @@ export interface UserResponse {
   role: string;
   active: boolean;
   timezone: string;
+  commuteAnomalyThresholdMinutes: number;
   createdAt: string;
 }
 
@@ -13,6 +14,7 @@ export interface UpdateUserRequest {
   displayName?: string;
   requiredDaysPerWeek?: number;
   timezone?: string;
+  commuteAnomalyThresholdMinutes?: number;
 }
 
 export interface ApiKeyResponse {

@@ -45,6 +45,9 @@ public class UserService {
             }
             user.setTimezone(request.getTimezone());
         }
+        if (request.getCommuteAnomalyThresholdMinutes() != null) {
+            user.setCommuteAnomalyThresholdMinutes(request.getCommuteAnomalyThresholdMinutes());
+        }
         User saved = userRepository.save(user);
         log.info("User profile updated: id={}", user.getId());
         return saved;

@@ -2,6 +2,8 @@ package com.rto.tracker.dto;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -26,4 +28,8 @@ public class UpdateUserRequest {
 
     @Size(max = 64, message = "timezone must be at most 64 characters")
     private String timezone;
+
+    @Min(value = 5, message = "commuteAnomalyThresholdMinutes must be at least 5")
+    @Max(value = 240, message = "commuteAnomalyThresholdMinutes must be at most 240")
+    private Integer commuteAnomalyThresholdMinutes;
 }

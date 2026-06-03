@@ -1,6 +1,7 @@
 package com.rto.tracker.service;
 
 import com.rto.tracker.domain.*;
+import com.rto.tracker.repository.CommuteAnnotationRepository;
 import com.rto.tracker.repository.OfficeDayRecordRepository;
 import com.rto.tracker.repository.ZoneEventRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -26,6 +27,9 @@ class OfficeDayCalculationServiceTest {
     @Mock
     private OfficeDayRecordRepository recordRepository;
 
+    @Mock
+    private CommuteAnnotationRepository annotationRepository;
+
     private OfficeDayCalculationService service;
 
     private User testUser;
@@ -37,7 +41,9 @@ class OfficeDayCalculationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OfficeDayCalculationService(eventRepository, recordRepository, new SimpleMeterRegistry());
+        service = new OfficeDayCalculationService(eventRepository, recordRepository, annotationRepository, new SimpleMeterRegistry());
+        lenient().when(annotationRepository.findByUserIdAndDateOrderByStartTimeAsc(any(), any()))
+                .thenReturn(Collections.emptyList());
         testDate = LocalDate.of(2026, 5, 29);
 
         testUser = User.builder()
@@ -220,6 +226,90 @@ class OfficeDayCalculationServiceTest {
         OfficeDayRecord record = service.compute(testUser.getId(), testUser, testDate);
 
         assertThat(record.getCommuteDuration()).isEqualTo(0L);
+    }
+
+    // --- Commute Annotation Subtraction ---
+
+    @Test
+    void annotation_fullyInsideInboundWindow_subtracted() {
+        List<ZoneEvent> events = List.of(
+                makeEvent(homeZone, EventType.EXIT, 7, 15),
+                makeEvent(officeZone, EventType.ENTER, 8, 21),
+                makeEvent(officeZone, EventType.EXIT, 17, 13),
+                makeEvent(homeZone, EventType.ENTER, 21, 19));
+        stubEvents(events);
+
+        ZoneId tz = ZoneId.of(testUser.getTimezone());
+        CommuteAnnotation happyHour = CommuteAnnotation.builder()
+                .startTime(testDate.atTime(17, 13).atZone(tz).toInstant())
+                .endTime(testDate.atTime(20, 11).atZone(tz).toInstant())
+                .category(CommuteAnnotationCategory.SOCIAL)
+                .date(testDate)
+                .build();
+        when(annotationRepository.findByUserIdAndDateOrderByStartTimeAsc(testUser.getId(), testDate))
+                .thenReturn(List.of(happyHour));
+
+        OfficeDayRecord record = service.compute(testUser.getId(), testUser, testDate);
+
+        // Outbound: 07:15 -> 08:21 = 66 min = 3960s
+        // Inbound raw: 17:13 -> 21:19 = 4h 6m = 14760s
+        // Annotation: 17:13 -> 20:11 = 2h 58m = 10680s
+        // Inbound corrected: 14760 - 10680 = 4080s
+        // Total: 3960 + 4080 = 8040s
+        assertThat(record.getCommuteDuration()).isEqualTo(8040L);
+    }
+
+    @Test
+    void annotation_straddlingOfficeExit_clippedToWindow() {
+        List<ZoneEvent> events = List.of(
+                makeEvent(officeZone, EventType.ENTER, 9, 0),
+                makeEvent(officeZone, EventType.EXIT, 17, 0),
+                makeEvent(homeZone, EventType.ENTER, 19, 0));
+        stubEvents(events);
+
+        ZoneId tz = ZoneId.of(testUser.getTimezone());
+        // Annotation begins 30 min before office exit and ends 30 min after.
+        CommuteAnnotation ann = CommuteAnnotation.builder()
+                .startTime(testDate.atTime(16, 30).atZone(tz).toInstant())
+                .endTime(testDate.atTime(17, 30).atZone(tz).toInstant())
+                .category(CommuteAnnotationCategory.OTHER)
+                .date(testDate)
+                .build();
+        when(annotationRepository.findByUserIdAndDateOrderByStartTimeAsc(testUser.getId(), testDate))
+                .thenReturn(List.of(ann));
+
+        OfficeDayRecord record = service.compute(testUser.getId(), testUser, testDate);
+
+        // Inbound raw: 17:00 -> 19:00 = 2h = 7200s
+        // Only the 30 min after office exit overlaps the inbound window = 1800s
+        // Corrected: 7200 - 1800 = 5400s
+        assertThat(record.getCommuteDuration()).isEqualTo(5400L);
+    }
+
+    @Test
+    void annotation_outsideCommuteWindow_noEffect() {
+        List<ZoneEvent> events = List.of(
+                makeEvent(homeZone, EventType.EXIT, 8, 0),
+                makeEvent(officeZone, EventType.ENTER, 9, 0),
+                makeEvent(officeZone, EventType.EXIT, 17, 0),
+                makeEvent(homeZone, EventType.ENTER, 18, 0));
+        stubEvents(events);
+
+        ZoneId tz = ZoneId.of(testUser.getTimezone());
+        // Annotation in the middle of the office day — not in any commute window.
+        CommuteAnnotation ann = CommuteAnnotation.builder()
+                .startTime(testDate.atTime(12, 0).atZone(tz).toInstant())
+                .endTime(testDate.atTime(13, 0).atZone(tz).toInstant())
+                .category(CommuteAnnotationCategory.OTHER)
+                .date(testDate)
+                .build();
+        when(annotationRepository.findByUserIdAndDateOrderByStartTimeAsc(testUser.getId(), testDate))
+                .thenReturn(List.of(ann));
+
+        OfficeDayRecord record = service.compute(testUser.getId(), testUser, testDate);
+
+        // Outbound 1h + inbound 1h = 7200s, no subtraction
+        assertThat(record.getCommuteDuration()).isEqualTo(7200L);
     }
 
     // --- Commute Route ---

@@ -2,6 +2,7 @@ package com.rto.tracker.service;
 
 import com.rto.tracker.domain.*;
 import com.rto.tracker.dto.AuditResponse;
+import com.rto.tracker.repository.CommuteAnnotationRepository;
 import com.rto.tracker.repository.OfficeDayRecordRepository;
 import com.rto.tracker.repository.ZoneEventRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -28,6 +29,9 @@ class AuditServiceTest {
     @Mock
     private ZoneEventRepository eventRepository;
 
+    @Mock
+    private CommuteAnnotationRepository annotationRepository;
+
     private OfficeDayCalculationService calculationService;
 
     private AuditService auditService;
@@ -37,7 +41,9 @@ class AuditServiceTest {
 
     @BeforeEach
     void setUp() {
-        calculationService = new OfficeDayCalculationService(eventRepository, recordRepository, new SimpleMeterRegistry());
+        calculationService = new OfficeDayCalculationService(eventRepository, recordRepository, annotationRepository, new SimpleMeterRegistry());
+        lenient().when(annotationRepository.findByUserIdAndDateOrderByStartTimeAsc(any(), any()))
+                .thenReturn(Collections.emptyList());
         // AuditService now only needs OfficeDayCalculationService
         auditService = new AuditService(calculationService);
 

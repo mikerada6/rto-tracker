@@ -26,6 +26,8 @@ public class DayResponse {
     private String inboundCommute;
     private String commuteRoute;
     private List<DayEventEntry> events;
+    private List<CommuteAnnotationDto.Response> commuteAnnotations;
+    private Integer anomalyThresholdMinutes;
 
     @Data
     @NoArgsConstructor

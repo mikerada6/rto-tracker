@@ -1,6 +1,7 @@
 package com.rto.tracker.service;
 
 import com.rto.tracker.domain.*;
+import com.rto.tracker.repository.CommuteAnnotationRepository;
 import com.rto.tracker.repository.OfficeDayRecordRepository;
 import com.rto.tracker.repository.ZoneEventRepository;
 import io.micrometer.core.instrument.Counter;
@@ -20,14 +21,17 @@ public class OfficeDayCalculationService {
 
     private final ZoneEventRepository eventRepository;
     private final OfficeDayRecordRepository recordRepository;
+    private final CommuteAnnotationRepository annotationRepository;
     private final Counter cacheHitCounter;
     private final Counter cacheMissCounter;
 
     public OfficeDayCalculationService(ZoneEventRepository eventRepository,
                                         OfficeDayRecordRepository recordRepository,
+                                        CommuteAnnotationRepository annotationRepository,
                                         MeterRegistry meterRegistry) {
         this.eventRepository = eventRepository;
         this.recordRepository = recordRepository;
+        this.annotationRepository = annotationRepository;
         this.cacheHitCounter = Counter.builder("rto.officedayrecord.cache.hit")
                 .description("OfficeDayRecord cache hits")
                 .register(meterRegistry);
@@ -108,6 +112,7 @@ public class OfficeDayCalculationService {
         Instant dayEnd = date.plusDays(1).atStartOfDay(userZone).toInstant();
 
         List<ZoneEvent> events = eventRepository.findByUserIdAndTimestampRange(userId, dayStart, dayEnd);
+        List<CommuteAnnotation> annotations = annotationRepository.findByUserIdAndDateOrderByStartTimeAsc(userId, date);
 
         Set<Zone> officesVisited = events.stream()
                 .filter(e -> e.getZone().getType() == ZoneType.OFFICE && e.getEventType() == EventType.ENTER)
@@ -115,7 +120,7 @@ public class OfficeDayCalculationService {
                 .collect(Collectors.toSet());
 
         long totalOfficeTime = calculateTotalOfficeTime(events, dayEnd);
-        long commuteDuration = calculateCommuteDuration(events);
+        long commuteDuration = calculateCommuteDuration(events, annotations);
         Instant firstOfficeEntry = findFirstOfficeEntry(events);
         Instant lastOfficeExit = findLastOfficeExit(events);
 
@@ -160,11 +165,16 @@ public class OfficeDayCalculationService {
         return totalSeconds;
     }
 
-    long calculateCommuteDuration(List<ZoneEvent> events) {
-        return calculateOutboundCommuteDuration(events) + calculateInboundCommuteDuration(events);
+    long calculateCommuteDuration(List<ZoneEvent> events, List<CommuteAnnotation> annotations) {
+        return calculateOutboundCommuteDuration(events, annotations)
+                + calculateInboundCommuteDuration(events, annotations);
     }
 
     public long calculateOutboundCommuteDuration(List<ZoneEvent> events) {
+        return calculateOutboundCommuteDuration(events, Collections.emptyList());
+    }
+
+    public long calculateOutboundCommuteDuration(List<ZoneEvent> events, List<CommuteAnnotation> annotations) {
         Instant homeExit = events.stream()
                 .filter(e -> e.getZone().getType() == ZoneType.HOME && e.getEventType() == EventType.EXIT)
                 .map(ZoneEvent::getTimestamp)
@@ -178,12 +188,18 @@ public class OfficeDayCalculationService {
                 .orElse(null);
 
         if (homeExit != null && firstOfficeEnter != null && homeExit.isBefore(firstOfficeEnter)) {
-            return Duration.between(homeExit, firstOfficeEnter).getSeconds();
+            long raw = Duration.between(homeExit, firstOfficeEnter).getSeconds();
+            long subtracted = annotatedSecondsWithin(homeExit, firstOfficeEnter, annotations);
+            return Math.max(0, raw - subtracted);
         }
         return 0;
     }
 
     public long calculateInboundCommuteDuration(List<ZoneEvent> events) {
+        return calculateInboundCommuteDuration(events, Collections.emptyList());
+    }
+
+    public long calculateInboundCommuteDuration(List<ZoneEvent> events, List<CommuteAnnotation> annotations) {
         Instant lastOfficeExit = events.stream()
                 .filter(e -> e.getZone().getType() == ZoneType.OFFICE && e.getEventType() == EventType.EXIT)
                 .map(ZoneEvent::getTimestamp)
@@ -199,10 +215,30 @@ public class OfficeDayCalculationService {
                     .orElse(null);
 
             if (homeEntry != null) {
-                return Duration.between(lastOfficeExit, homeEntry).getSeconds();
+                long raw = Duration.between(lastOfficeExit, homeEntry).getSeconds();
+                long subtracted = annotatedSecondsWithin(lastOfficeExit, homeEntry, annotations);
+                return Math.max(0, raw - subtracted);
             }
         }
         return 0;
+    }
+
+    /**
+     * Sum of each annotation's intersection with [windowStart, windowEnd], in seconds.
+     */
+    long annotatedSecondsWithin(Instant windowStart, Instant windowEnd, List<CommuteAnnotation> annotations) {
+        if (windowStart == null || windowEnd == null || annotations == null || annotations.isEmpty()) {
+            return 0;
+        }
+        long total = 0;
+        for (CommuteAnnotation ann : annotations) {
+            Instant s = ann.getStartTime().isAfter(windowStart) ? ann.getStartTime() : windowStart;
+            Instant e = ann.getEndTime().isBefore(windowEnd) ? ann.getEndTime() : windowEnd;
+            if (e.isAfter(s)) {
+                total += Duration.between(s, e).getSeconds();
+            }
+        }
+        return total;
     }
 
     Instant findFirstOfficeEntry(List<ZoneEvent> events) {
