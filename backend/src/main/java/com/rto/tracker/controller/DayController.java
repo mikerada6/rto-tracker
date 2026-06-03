@@ -1,12 +1,15 @@
 package com.rto.tracker.controller;
 
+import com.rto.tracker.domain.CommuteAnnotation;
 import com.rto.tracker.domain.OfficeDayRecord;
 import com.rto.tracker.domain.User;
 import com.rto.tracker.domain.Zone;
 import com.rto.tracker.domain.ZoneEvent;
+import com.rto.tracker.dto.CommuteAnnotationDto;
 import com.rto.tracker.dto.DayResponse;
 import com.rto.tracker.dto.ErrorResponse;
 import com.rto.tracker.repository.ZoneEventRepository;
+import com.rto.tracker.service.CommuteAnnotationService;
 import com.rto.tracker.service.DurationFormatter;
 import com.rto.tracker.service.OfficeDayCalculationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,6 +39,7 @@ public class DayController {
 
     private final OfficeDayCalculationService calculationService;
     private final ZoneEventRepository eventRepository;
+    private final CommuteAnnotationService annotationService;
 
     @GetMapping("/{date}")
     @Operation(summary = "Get day breakdown",
@@ -55,12 +59,13 @@ public class DayController {
         Instant dayStart = date.atStartOfDay(ZoneId.of(user.getTimezone())).toInstant();
         Instant dayEnd = date.plusDays(1).atStartOfDay(ZoneId.of(user.getTimezone())).toInstant();
         List<ZoneEvent> events = eventRepository.findByUserIdAndTimestampRange(user.getId(), dayStart, dayEnd);
+        List<CommuteAnnotation> annotations = annotationService.listForDay(user.getId(), date);
 
         List<String> commuteRoute = calculationService.buildCommuteRoute(events);
         String routeString = commuteRoute.isEmpty() ? null : String.join(" \u2192 ", commuteRoute);
 
-        long outboundSecs = calculationService.calculateOutboundCommuteDuration(events);
-        long inboundSecs = calculationService.calculateInboundCommuteDuration(events);
+        long outboundSecs = calculationService.calculateOutboundCommuteDuration(events, annotations);
+        long inboundSecs = calculationService.calculateInboundCommuteDuration(events, annotations);
 
         List<DayResponse.DayEventEntry> eventEntries = events.stream()
                 .sorted(Comparator.comparing(ZoneEvent::getTimestamp))
@@ -70,6 +75,10 @@ public class DayController {
                         .type(e.getEventType().name())
                         .timestamp(e.getTimestamp())
                         .build())
+                .toList();
+
+        List<CommuteAnnotationDto.Response> annotationDtos = annotations.stream()
+                .map(CommuteAnnotationDto.Response::from)
                 .toList();
 
         DayResponse response = DayResponse.builder()
@@ -89,6 +98,8 @@ public class DayController {
                 .inboundCommute(inboundSecs > 0 ? DurationFormatter.format(inboundSecs) : null)
                 .commuteRoute(routeString)
                 .events(eventEntries)
+                .commuteAnnotations(annotationDtos)
+                .anomalyThresholdMinutes(user.getCommuteAnomalyThresholdMinutes())
                 .build();
 
         log.info("Day breakdown returned: userId={}, date={}, officeDay={}, events={}", user.getId(), date, !record.getOfficesVisited().isEmpty(), eventEntries.size());

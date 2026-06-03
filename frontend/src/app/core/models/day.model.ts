@@ -1,3 +1,5 @@
+import { CommuteAnnotation } from './commute-annotation.model';
+
 export interface DayResponse {
   date: string;
   officeDay: boolean;
@@ -10,6 +12,8 @@ export interface DayResponse {
   inboundCommute: string | null;
   commuteRoute: string | null;
   events: DayEventEntry[];
+  commuteAnnotations: CommuteAnnotation[];
+  anomalyThresholdMinutes: number;
 }
 
 export interface DayEventEntry {

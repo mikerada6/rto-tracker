@@ -1,9 +1,14 @@
-import { Component, OnInit, signal, computed, HostListener } from '@angular/core';
+import { Component, OnInit, signal, computed, HostListener, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DatePipe, NgTemplateOutlet, DecimalPipe } from '@angular/common';
 import { CalendarService } from '../../core/services/calendar.service';
+import { CommuteAnnotationService } from '../../core/services/commute-annotation.service';
 import { AuditDayEntry } from '../../core/models/audit.model';
 import { DayResponse } from '../../core/models/day.model';
+import {
+  CommuteAnnotation,
+  categoryMeta,
+} from '../../core/models/commute-annotation.model';
 import {
   format, startOfMonth, endOfMonth, addMonths, subMonths,
   eachDayOfInterval, getDay, startOfWeek, endOfWeek,
@@ -11,7 +16,8 @@ import {
 } from 'date-fns';
 import { BottomSheetComponent } from '../../shared/components/bottom-sheet.component';
 import { DayTimelineBarComponent } from '../../shared/components/day-timeline-bar.component';
-import { buildSegments, buildJourneyPhases, formatSegmentDuration, TimelineSegment, JourneyPhase } from '../../core/utils/timeline.utils';
+import { buildSegments, buildJourneyPhases, formatSegmentDuration, TimelineSegment, JourneyPhase, JourneyStop } from '../../core/utils/timeline.utils';
+import { CommuteAnnotationDialogComponent, CommuteAnnotationDialogResult } from './components/commute-annotation-dialog.component';
 
 interface CalendarDay {
   date: Date;
@@ -30,7 +36,7 @@ interface CalendarDay {
 
 @Component({
   selector: 'app-calendar',
-  imports: [DatePipe, NgTemplateOutlet, DecimalPipe, BottomSheetComponent, DayTimelineBarComponent],
+  imports: [DatePipe, NgTemplateOutlet, DecimalPipe, BottomSheetComponent, DayTimelineBarComponent, CommuteAnnotationDialogComponent],
   styles: [`
     .month-slide-enter { animation: slideInRight 0.22s ease-out; }
     .month-slide-back  { animation: slideInLeft  0.22s ease-out; }
@@ -226,6 +232,17 @@ interface CalendarDay {
       <ng-container *ngTemplateOutlet="dayDetailTpl"/>
     </app-bottom-sheet>
 
+    <!-- ── Commute annotation dialog ── -->
+    <app-commute-annotation-dialog
+      [open]="annotationDialogOpen()"
+      [start]="annotationDialogStart()"
+      [end]="annotationDialogEnd()"
+      [existing]="annotationDialogExisting()"
+      (save)="saveAnnotation($event)"
+      (delete)="deleteAnnotation()"
+      (cancel)="cancelAnnotationDialog()" />
+
+
     <!-- ── Shared day detail template ── -->
     <ng-template #dayDetailTpl>
       @if (selectedDayLoading()) {
@@ -339,19 +356,34 @@ interface CalendarDay {
                         <div class="flex items-center justify-between px-3 py-2"
                              [class]="phaseHeaderBgClass(phase.type)">
                           <div class="flex items-center gap-2">
-                            <span class="text-sm">{{ phaseIcon(phase.type) }}</span>
+                            <span class="text-sm">{{ phaseIcon(phase.type, phase) }}</span>
                             <span class="text-[11px] font-semibold uppercase tracking-wide"
                                   [class]="phaseHeaderTextClass(phase.type)">
                               {{ phase.label }}
                             </span>
                           </div>
-                          @if (phase.totalDurationSeconds > 0) {
-                            <span class="text-xs font-bold"
-                                  [class]="phaseHeaderTextClass(phase.type)">
-                              {{ formatDur(phase.totalDurationSeconds) }}
-                            </span>
-                          }
+                          <div class="flex items-center gap-2">
+                            @if (phase.totalDurationSeconds > 0) {
+                              <span class="text-xs font-bold"
+                                    [class]="phaseHeaderTextClass(phase.type)">
+                                {{ formatDur(phase.totalDurationSeconds) }}
+                              </span>
+                            }
+                            @if (phase.type === 'annotation') {
+                              <button type="button"
+                                      (click)="openExistingAnnotationDialog(phase)"
+                                      class="text-[10px] font-medium text-purple-700 underline underline-offset-2 hover:text-purple-900">
+                                Edit
+                              </button>
+                            }
+                          </div>
                         </div>
+
+                        @if (phase.type === 'annotation' && phase.annotation?.note) {
+                          <div class="px-3 py-1.5 text-[11px] text-purple-700 italic bg-purple-50/50 border-t border-purple-100">
+                            "{{ phase.annotation?.note }}"
+                          </div>
+                        }
 
                         <!-- Phase stops with subway-map rail (inline segments — rail is bounded by first & last dot) -->
                         <div class="py-1">
@@ -359,7 +391,18 @@ interface CalendarDay {
                             @if (!stop.isMicroVisit) {
                               <!-- Rail / transit row between stops -->
                               @if (!isFirst) {
-                                @if (stop.transitFromPrevSeconds > 120) {
+                                @if (stop.isAnomalousGap) {
+                                  <div class="flex items-center gap-2 px-3 py-1">
+                                    <div class="w-5 flex justify-center flex-shrink-0">
+                                      <div class="w-0.5 h-4 border-l-2 border-dotted border-purple-400"></div>
+                                    </div>
+                                    <button type="button"
+                                            (click)="openAnnotationDialog(stop)"
+                                            class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors">
+                                      🏷️ Label this · {{ formatDur(stop.transitFromPrevSeconds) }}
+                                    </button>
+                                  </div>
+                                } @else if (stop.transitFromPrevSeconds > 120) {
                                   <div class="flex items-center gap-2 px-3 py-1">
                                     <div class="w-5 flex justify-center flex-shrink-0">
                                       <div class="w-0.5 h-4 border-l-2 border-dotted"
@@ -571,13 +614,24 @@ export class CalendarComponent implements OnInit {
   readonly journeyPhases = computed((): JourneyPhase[] => {
     const segs = this.daySegments();
     if (!segs.length) return [];
-    return buildJourneyPhases(segs);
+    const day = this.selectedDay();
+    const annotations = day?.commuteAnnotations ?? [];
+    const threshold = day?.anomalyThresholdMinutes ?? 45;
+    return buildJourneyPhases(segs, annotations, threshold);
   });
+
+  // ── Commute annotation dialog state ──
+  readonly annotationDialogOpen = signal(false);
+  readonly annotationDialogStart = signal<Date>(new Date());
+  readonly annotationDialogEnd = signal<Date>(new Date());
+  readonly annotationDialogExisting = signal<CommuteAnnotation | null>(null);
 
   /** True when the user is currently at the office (no departure yet) */
   readonly officeOngoing = computed((): boolean => {
     return this.daySegments().some(s => s.zoneType === 'OFFICE' && !s.isMicroVisit && s.departureTime === null);
   });
+
+  private annotationService = inject(CommuteAnnotationService);
 
   constructor(
     private calendarService: CalendarService,
@@ -649,6 +703,70 @@ export class CalendarComponent implements OnInit {
     this.showRawEvents.set(!this.showRawEvents());
   }
 
+  // ── Commute annotation actions ──
+
+  openAnnotationDialog(stop: JourneyStop): void {
+    if (!stop.gapStartTime || !stop.gapEndTime) return;
+    this.annotationDialogExisting.set(null);
+    this.annotationDialogStart.set(stop.gapStartTime);
+    this.annotationDialogEnd.set(stop.gapEndTime);
+    this.annotationDialogOpen.set(true);
+  }
+
+  openExistingAnnotationDialog(phase: JourneyPhase): void {
+    if (!phase.annotation) return;
+    this.annotationDialogExisting.set(phase.annotation);
+    this.annotationDialogStart.set(new Date(phase.annotation.startTime));
+    this.annotationDialogEnd.set(new Date(phase.annotation.endTime));
+    this.annotationDialogOpen.set(true);
+  }
+
+  cancelAnnotationDialog(): void {
+    this.annotationDialogOpen.set(false);
+    this.annotationDialogExisting.set(null);
+  }
+
+  saveAnnotation(result: CommuteAnnotationDialogResult): void {
+    const date = this.selectedDateStr();
+    if (!date) return;
+    const existing = this.annotationDialogExisting();
+    const obs = existing
+      ? this.annotationService.update(date, existing.id, { category: result.category, note: result.note })
+      : this.annotationService.create(date, {
+          startTime: this.annotationDialogStart().toISOString(),
+          endTime: this.annotationDialogEnd().toISOString(),
+          category: result.category,
+          note: result.note,
+        });
+    obs.subscribe({
+      next: () => {
+        this.annotationDialogOpen.set(false);
+        this.annotationDialogExisting.set(null);
+        this.selectDay(date);
+      },
+      error: () => {
+        this.annotationDialogOpen.set(false);
+      },
+    });
+  }
+
+  deleteAnnotation(): void {
+    const date = this.selectedDateStr();
+    const existing = this.annotationDialogExisting();
+    if (!date || !existing) return;
+    this.annotationService.delete(date, existing.id).subscribe({
+      next: () => {
+        this.annotationDialogOpen.set(false);
+        this.annotationDialogExisting.set(null);
+        this.selectDay(date);
+      },
+    });
+  }
+
+  annotationCategoryIcon(category: string): string {
+    return categoryMeta(category as any).icon;
+  }
+
   zoneTypeIcon(type: string): string {
     switch (type) {
       case 'HOME':          return '🏠';
@@ -716,7 +834,10 @@ export class CalendarComponent implements OnInit {
     return formatSegmentDuration(seconds);
   }
 
-  phaseIcon(type: string): string {
+  phaseIcon(type: string, phase?: JourneyPhase): string {
+    if (type === 'annotation' && phase?.annotation) {
+      return categoryMeta(phase.annotation.category).icon;
+    }
     switch (type) {
       case 'morning_commute': return '🌅';
       case 'office':          return '🏢';
@@ -732,6 +853,7 @@ export class CalendarComponent implements OnInit {
       case 'office':          return 'border-green-200';
       case 'evening_commute': return 'border-amber-200';
       case 'home':            return 'border-gray-200';
+      case 'annotation':      return 'border-purple-200';
       default:                return 'border-gray-200';
     }
   }
@@ -742,6 +864,7 @@ export class CalendarComponent implements OnInit {
       case 'office':          return 'bg-green-50';
       case 'evening_commute': return 'bg-amber-50';
       case 'home':            return 'bg-gray-50';
+      case 'annotation':      return 'bg-purple-50';
       default:                return 'bg-gray-50';
     }
   }
@@ -752,6 +875,7 @@ export class CalendarComponent implements OnInit {
       case 'office':          return 'text-green-700';
       case 'evening_commute': return 'text-amber-700';
       case 'home':            return 'text-gray-600';
+      case 'annotation':      return 'text-purple-700';
       default:                return 'text-gray-600';
     }
   }
@@ -761,6 +885,7 @@ export class CalendarComponent implements OnInit {
       case 'morning_commute': return 'border-blue-300';
       case 'office':          return 'border-green-300';
       case 'evening_commute': return 'border-amber-300';
+      case 'annotation':      return 'border-purple-300';
       default:                return 'border-gray-300';
     }
   }
@@ -771,6 +896,7 @@ export class CalendarComponent implements OnInit {
       case 'office':          return 'bg-green-300';
       case 'evening_commute': return 'bg-amber-300';
       case 'home':            return 'bg-gray-300';
+      case 'annotation':      return 'bg-purple-300';
       default:                return 'bg-gray-300';
     }
   }
@@ -781,6 +907,7 @@ export class CalendarComponent implements OnInit {
       case 'office':          return 'border-green-300';
       case 'evening_commute': return 'border-amber-300';
       case 'home':            return 'border-gray-300';
+      case 'annotation':      return 'border-purple-300';
       default:                return 'border-gray-300';
     }
   }

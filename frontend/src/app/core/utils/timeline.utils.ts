@@ -1,4 +1,5 @@
 import { DayEventEntry } from '../models/day.model';
+import { CommuteAnnotation, CommuteAnnotationCategory, categoryMeta } from '../models/commute-annotation.model';
 
 export type ZoneType = 'HOME' | 'TRAIN_STATION' | 'OFFICE' | 'OTHER';
 
@@ -138,7 +139,7 @@ export function formatSegmentDuration(seconds: number): string {
 
 // ── Journey phase grouping ──────────────────────────────────────────
 
-export type JourneyPhaseType = 'morning_commute' | 'office' | 'evening_commute' | 'home' | 'other';
+export type JourneyPhaseType = 'morning_commute' | 'office' | 'evening_commute' | 'home' | 'other' | 'annotation';
 
 export interface JourneyStop {
   zone: string;
@@ -157,6 +158,12 @@ export interface JourneyStop {
    * and contribute no duration of their own.
    */
   isPhaseEndpoint?: boolean;
+  /** Transit before this stop exceeds the user's anomaly threshold and has no annotation. */
+  isAnomalousGap?: boolean;
+  /** Start of the unannotated gap (previous stop's departure). Used to seed an annotation request. */
+  gapStartTime?: Date;
+  /** End of the unannotated gap (this stop's arrival). */
+  gapEndTime?: Date;
 }
 
 export interface JourneyPhase {
@@ -170,6 +177,8 @@ export interface JourneyPhase {
   totalTransitSeconds: number;
   /** Transit gap after the last stop (to the next phase) */
   trailingTransitSeconds: number;
+  /** Annotation backing this phase (only set when type === 'annotation'). */
+  annotation?: CommuteAnnotation;
 }
 
 /**
@@ -183,7 +192,11 @@ export interface JourneyPhase {
  * synthesized so the rail visually starts at Home and ends at Home, with the office
  * acting as the connector between phases.
  */
-export function buildJourneyPhases(segments: TimelineSegment[]): JourneyPhase[] {
+export function buildJourneyPhases(
+  segments: TimelineSegment[],
+  annotations: CommuteAnnotation[] = [],
+  thresholdMinutes: number = 45,
+): JourneyPhase[] {
   if (!segments.length) return [];
 
   const firstOfficeIdx = segments.findIndex(s => s.zoneType === 'OFFICE' && !s.isMicroVisit);
@@ -269,7 +282,93 @@ export function buildJourneyPhases(segments: TimelineSegment[]): JourneyPhase[] 
     phases.push(eveningPhase);
   }
 
-  return phases;
+  return mergeAnnotationsIntoPhases(phases, annotations, thresholdMinutes);
+}
+
+interface AnnotationWindow {
+  ann: CommuteAnnotation;
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Walk each commute phase, subtract annotation overlap from transit gaps, then
+ * insert standalone "annotation" phases at the right time slots. Also flags any
+ * remaining unannotated gap longer than threshold so the UI can offer a label
+ * chip.
+ */
+function mergeAnnotationsIntoPhases(
+  phases: JourneyPhase[],
+  annotations: CommuteAnnotation[],
+  thresholdMinutes: number,
+): JourneyPhase[] {
+  const windows: AnnotationWindow[] = annotations.map(a => ({
+    ann: a,
+    start: new Date(a.startTime),
+    end: new Date(a.endTime),
+  }));
+  const thresholdSeconds = Math.max(0, thresholdMinutes) * 60;
+
+  for (const phase of phases) {
+    if (phase.type !== 'morning_commute' && phase.type !== 'evening_commute') continue;
+    for (let i = 0; i < phase.stops.length; i++) {
+      const stop = phase.stops[i];
+      if (stop.transitFromPrevSeconds <= 0) continue;
+      const gapEnd = stop.arrivalTime;
+      const gapStart = new Date(gapEnd.getTime() - stop.transitFromPrevSeconds * 1000);
+
+      let subtracted = 0;
+      for (const w of windows) {
+        const s = w.start > gapStart ? w.start : gapStart;
+        const e = w.end < gapEnd ? w.end : gapEnd;
+        const overlap = (e.getTime() - s.getTime()) / 1000;
+        if (overlap > 0) subtracted += overlap;
+      }
+      if (subtracted > 0) {
+        const newTransit = Math.max(0, stop.transitFromPrevSeconds - subtracted);
+        const delta = stop.transitFromPrevSeconds - newTransit;
+        stop.transitFromPrevSeconds = newTransit;
+        phase.totalTransitSeconds = Math.max(0, phase.totalTransitSeconds - delta);
+        phase.totalDurationSeconds = Math.max(0, phase.totalDurationSeconds - delta);
+      }
+
+      const remaining = stop.transitFromPrevSeconds;
+      if (remaining >= thresholdSeconds && thresholdSeconds > 0) {
+        stop.isAnomalousGap = true;
+        stop.gapStartTime = gapStart;
+        stop.gapEndTime = gapEnd;
+      }
+    }
+  }
+
+  const annotationPhases: JourneyPhase[] = windows.map(w => {
+    const durationSeconds = Math.max(0, (w.end.getTime() - w.start.getTime()) / 1000);
+    const meta = categoryMeta(w.ann.category);
+    return {
+      type: 'annotation' as JourneyPhaseType,
+      label: meta.label,
+      stops: [{
+        zone: meta.label,
+        zoneType: 'OTHER' as ZoneType,
+        arrivalTime: w.start,
+        departureTime: w.end,
+        durationSeconds,
+        transitFromPrevSeconds: 0,
+        isImplicitArrival: false,
+        isMicroVisit: false,
+      }],
+      startTime: w.start,
+      endTime: w.end,
+      totalDurationSeconds: durationSeconds,
+      totalTransitSeconds: 0,
+      trailingTransitSeconds: 0,
+      annotation: w.ann,
+    };
+  });
+
+  const merged = [...phases, ...annotationPhases];
+  merged.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+  return merged;
 }
 
 function buildPhase(type: JourneyPhaseType, label: string, segments: TimelineSegment[]): JourneyPhase {

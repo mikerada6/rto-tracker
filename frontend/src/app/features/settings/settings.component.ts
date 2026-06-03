@@ -121,6 +121,34 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
               Times are stored in UTC and displayed in your local timezone. Click 🌐 to auto-detect.
             </p>
           </div>
+
+          <div>
+            <label for="anomalyThreshold" class="block text-sm font-medium text-gray-700 mb-1">Commute anomaly threshold</label>
+            <div class="flex gap-2">
+              <input
+                id="anomalyThreshold"
+                type="number"
+                min="5"
+                max="240"
+                step="5"
+                [(ngModel)]="anomalyThresholdMinutes"
+                name="anomalyThreshold"
+                aria-label="Commute anomaly threshold in minutes"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm text-gray-900"
+              />
+              <button
+                (click)="updateAnomalyThreshold()"
+                [disabled]="saving()"
+                aria-label="Save anomaly threshold"
+                class="min-h-[2.75rem] px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                Save
+              </button>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">
+              Minutes. Commute transit gaps longer than this prompt you to label them (e.g. happy hour).
+            </p>
+          </div>
         </div>
 
         <!-- API Key -->
@@ -200,6 +228,7 @@ export class SettingsComponent implements OnInit {
   displayName = '';
   requiredDays = 3;
   timezone = 'America/New_York';
+  anomalyThresholdMinutes = 45;
 
   readonly timezoneOptions = [
     { value: 'America/New_York',    label: 'Eastern Time (ET) — New York' },
@@ -232,6 +261,7 @@ export class SettingsComponent implements OnInit {
           this.displayName = user.displayName;
           this.requiredDays = user.requiredDaysPerWeek;
           this.timezone = user.timezone || 'America/New_York';
+          this.anomalyThresholdMinutes = user.commuteAnomalyThresholdMinutes ?? 45;
           this.loading.set(false);
       },
       error: () => {
@@ -290,6 +320,22 @@ export class SettingsComponent implements OnInit {
       error: () => {
         this.saving.set(false);
         this.toast.error('Failed to update timezone.');
+      }
+    });
+  }
+
+  updateAnomalyThreshold(): void {
+    this.saving.set(true);
+    this.userService.updateProfile({ commuteAnomalyThresholdMinutes: this.anomalyThresholdMinutes }).subscribe({
+      next: (user) => {
+        this.user.set(user);
+        this.authService.setUser(user);
+        this.saving.set(false);
+        this.toast.success('Anomaly threshold updated');
+      },
+      error: () => {
+        this.saving.set(false);
+        this.toast.error('Failed to update threshold.');
       }
     });
   }

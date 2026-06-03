@@ -41,6 +41,10 @@ public class User {
     @Builder.Default
     private String timezone = "America/New_York";
 
+    @Column(name = "commute_anomaly_threshold_minutes", nullable = false)
+    @Builder.Default
+    private Integer commuteAnomalyThresholdMinutes = 45;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default

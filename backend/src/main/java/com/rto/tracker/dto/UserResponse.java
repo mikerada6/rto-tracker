@@ -24,6 +24,7 @@ public class UserResponse {
     private UserRole role;
     private BigDecimal requiredDaysPerWeek;
     private String timezone;
+    private Integer commuteAnomalyThresholdMinutes;
     private Instant createdAt;
 
     public static UserResponse from(User user) {
@@ -35,6 +36,7 @@ public class UserResponse {
                 .role(user.getRole())
                 .requiredDaysPerWeek(user.getRequiredDaysPerWeek())
                 .timezone(user.getTimezone())
+                .commuteAnomalyThresholdMinutes(user.getCommuteAnomalyThresholdMinutes())
                 .createdAt(user.getCreatedAt())
                 .build();
     }
