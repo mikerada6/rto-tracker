@@ -85,6 +85,8 @@ public class DashboardService {
                 PeriodStatsCalculator.calculate(yearStart, yearEnd, today, yearDays, required));
 
         List<DashboardSummaryResponse.RecentCommute> recentCommutes = getRecentCommutes(user, today);
+        List<DashboardSummaryResponse.QuarterDayEntry> quarterOfficeDays =
+                buildQuarterDayEntries(user.getId(), quarterStart, today);
 
         log.info("Dashboard summary computed: userId={}, weekDays={}, monthDays={}, quarterDays={}, yearDays={}",
                 user.getId(), weekDays, monthDays, quarterDays, yearDays);
@@ -97,6 +99,7 @@ public class DashboardService {
                 .quarter(quarterStats)
                 .year(yearStats)
                 .recentCommutes(recentCommutes)
+                .quarterOfficeDays(quarterOfficeDays)
                 .build();
     }
 
@@ -183,6 +186,18 @@ public class DashboardService {
         return (int) records.stream()
                 .filter(r -> !r.getOfficesVisited().isEmpty())
                 .count();
+    }
+
+    private List<DashboardSummaryResponse.QuarterDayEntry> buildQuarterDayEntries(
+            UUID userId, LocalDate quarterStart, LocalDate today) {
+        List<OfficeDayRecord> records = recordRepository.findByUserIdAndDateRange(userId, quarterStart, today);
+        return records.stream()
+                .filter(r -> !r.getOfficesVisited().isEmpty())
+                .map(r -> DashboardSummaryResponse.QuarterDayEntry.builder()
+                        .date(r.getDate())
+                        .totalOfficeTimeSeconds(r.getTotalOfficeTime() != null ? r.getTotalOfficeTime() : 0L)
+                        .build())
+                .toList();
     }
 
     private List<DashboardSummaryResponse.RecentCommute> getRecentCommutes(User user, LocalDate today) {

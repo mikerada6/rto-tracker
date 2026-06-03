@@ -22,6 +22,8 @@ public class DashboardSummaryResponse {
     private PeriodStatsResponse quarter;
     private PeriodStatsResponse year;
     private List<RecentCommute> recentCommutes;
+    /** Per-day office presence for the current quarter, used by the weekly bar chart. */
+    private List<QuarterDayEntry> quarterOfficeDays;
 
     @Data
     @NoArgsConstructor
@@ -33,5 +35,14 @@ public class DashboardSummaryResponse {
         private String outboundDuration;
         private String inboundDuration;
         private String route;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class QuarterDayEntry {
+        private LocalDate date;
+        private long totalOfficeTimeSeconds;
     }
 }

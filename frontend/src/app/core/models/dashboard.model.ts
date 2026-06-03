@@ -6,6 +6,7 @@ export interface DashboardSummary {
   quarter: PeriodStats;
   year: PeriodStats;
   recentCommutes: RecentCommute[];
+  quarterOfficeDays: QuarterDayEntry[];
 }
 
 export interface PeriodStats {
@@ -26,3 +27,9 @@ export interface RecentCommute {
   inboundDuration: string | null;
   route: string;
 }
+
+export interface QuarterDayEntry {
+  date: string;
+  totalOfficeTimeSeconds: number;
+}
+

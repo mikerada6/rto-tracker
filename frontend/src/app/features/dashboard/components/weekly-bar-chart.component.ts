@@ -1,9 +1,7 @@
-import { Component, Input, OnInit, OnChanges, signal, ViewChild, inject, effect } from '@angular/core';
+import { Component, Input, OnChanges, ViewChild, inject, effect } from '@angular/core';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartData } from 'chart.js';
-import { CalendarService } from '../../../core/services/calendar.service';
-import { AuditDayEntry } from '../../../core/models/audit.model';
-import { PeriodStats } from '../../../core/models/dashboard.model';
+import { QuarterDayEntry } from '../../../core/models/dashboard.model';
 import { ThemeService } from '../../../core/services/theme.service';
 import { startOfISOWeek, getISOWeek, format, parseISO } from 'date-fns';
 
@@ -16,15 +14,9 @@ interface WeekBucket {
   selector: 'app-weekly-bar-chart',
   imports: [BaseChartDirective],
   template: `
-    @if (loading()) {
+    @if (!chartData.labels?.length) {
       <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center justify-center py-10">
-          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-        </div>
-      </div>
-    } @else if (errorMsg()) {
-      <div class="bg-white rounded-lg shadow p-6">
-        <p class="text-sm text-gray-500 text-center">{{ errorMsg() }}</p>
+        <p class="text-sm text-gray-500 text-center">No office days recorded this quarter yet.</p>
       </div>
     } @else {
       <div class="bg-white rounded-lg shadow p-6">
@@ -40,58 +32,35 @@ interface WeekBucket {
     }
   `
 })
-export class WeeklyBarChartComponent implements OnInit, OnChanges {
-  @Input({ required: true }) quarter!: PeriodStats;
+export class WeeklyBarChartComponent implements OnChanges {
+  @Input({ required: true }) quarterOfficeDays!: QuarterDayEntry[];
   @Input({ required: true }) requiredAvg!: number;
 
   @ViewChild(BaseChartDirective) chart?: BaseChartDirective;
-
-  readonly loading = signal(true);
-  readonly errorMsg = signal('');
 
   chartData: ChartData<'bar'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'bar'>['options'] = {};
 
   private readonly themeService = inject(ThemeService);
 
-  constructor(private calendarService: CalendarService) {
+  constructor() {
     effect(() => {
       // Re-render chart when theme changes
       this.themeService.isDark();
-      if (!this.loading() && this.chartData.labels?.length) {
-        this.loadData();
+      if (this.chartData.labels?.length) {
+        this.buildChart(this.groupByWeek(this.quarterOfficeDays ?? []));
       }
     });
-  }
-
-  ngOnInit(): void {
-    this.loadData();
   }
 
   ngOnChanges(): void {
-    this.loadData();
+    if (this.quarterOfficeDays) {
+      const buckets = this.groupByWeek(this.quarterOfficeDays);
+      this.buildChart(buckets);
+    }
   }
 
-  private loadData(): void {
-    if (!this.quarter) return;
-
-    this.loading.set(true);
-    this.errorMsg.set('');
-
-    this.calendarService.getAudit(this.quarter.periodStart, this.quarter.periodEnd).subscribe({
-      next: (res) => {
-        const buckets = this.groupByWeek(res.days);
-        this.buildChart(buckets);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.errorMsg.set('Unable to load weekly data.');
-        this.loading.set(false);
-      }
-    });
-  }
-
-  private groupByWeek(days: AuditDayEntry[]): WeekBucket[] {
+  private groupByWeek(days: QuarterDayEntry[]): WeekBucket[] {
     const weekMap = new Map<string, WeekBucket>();
 
     for (const day of days) {
@@ -101,10 +70,7 @@ export class WeeklyBarChartComponent implements OnInit, OnChanges {
 
       if (!weekMap.has(key)) {
         const weekNum = getISOWeek(date);
-        weekMap.set(key, {
-          weekLabel: `W${weekNum}`,
-          daysInOffice: 0
-        });
+        weekMap.set(key, { weekLabel: `W${weekNum}`, daysInOffice: 0 });
       }
 
       if (day.totalOfficeTimeSeconds > 0) {
@@ -112,7 +78,6 @@ export class WeeklyBarChartComponent implements OnInit, OnChanges {
       }
     }
 
-    // Sort by week start date
     return Array.from(weekMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, bucket]) => bucket);
@@ -161,7 +126,6 @@ export class WeeklyBarChartComponent implements OnInit, OnChanges {
       }
     };
 
-    // Add annotation plugin reference line if available
     (this.chartOptions as any).plugins = {
       ...(this.chartOptions as any).plugins,
       annotation: {
@@ -186,7 +150,6 @@ export class WeeklyBarChartComponent implements OnInit, OnChanges {
       }
     };
 
-    // Trigger chart update
     setTimeout(() => this.chart?.update(), 0);
   }
 }

@@ -117,7 +117,7 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
 
         <!-- Weekly Bar Chart -->
         <app-weekly-bar-chart
-          [quarter]="summary()!.quarter"
+          [quarterOfficeDays]="summary()!.quarterOfficeDays"
           [requiredAvg]="summary()!.requiredAveragePerWeek"
         />
 
