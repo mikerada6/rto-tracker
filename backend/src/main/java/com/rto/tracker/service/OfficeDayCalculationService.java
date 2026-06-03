@@ -53,6 +53,53 @@ public class OfficeDayCalculationService {
         return recordRepository.save(record);
     }
 
+    /**
+     * Bulk version of ensureRecordsComputed. Fetches all existing records for the range in ONE
+     * query, then computes and saves only the missing dates. Returns the full set of records.
+     */
+    @Transactional
+    public List<OfficeDayRecord> ensureRangeComputed(User user, LocalDate start, LocalDate end) {
+        LocalDate effectiveEnd = end.isAfter(LocalDate.now()) ? LocalDate.now() : end;
+        if (start.isAfter(effectiveEnd)) {
+            return Collections.emptyList();
+        }
+
+        // One query for all existing records
+        List<OfficeDayRecord> existing = recordRepository.findByUserIdAndDateRange(
+                user.getId(), start, effectiveEnd);
+        Set<LocalDate> existingDates = existing.stream()
+                .map(OfficeDayRecord::getDate)
+                .collect(Collectors.toSet());
+
+        // Compute only the missing dates
+        List<OfficeDayRecord> computed = new ArrayList<>();
+        LocalDate date = start;
+        while (!date.isAfter(effectiveEnd)) {
+            if (!existingDates.contains(date)) {
+                log.debug("OfficeDayRecord cache miss: userId={}, date={}, computing...", user.getId(), date);
+                cacheMissCounter.increment();
+                OfficeDayRecord record = compute(user.getId(), user, date);
+                log.info("OfficeDayRecord computed: userId={}, date={}, officesVisited={}, officeTimeSecs={}, commuteSecs={}",
+                        user.getId(), date, record.getOfficesVisited().size(), record.getTotalOfficeTime(), record.getCommuteDuration());
+                computed.add(record);
+            } else {
+                cacheHitCounter.increment();
+            }
+            date = date.plusDays(1);
+        }
+
+        if (!computed.isEmpty()) {
+            recordRepository.saveAll(computed);
+            existing = new ArrayList<>(existing);
+            existing.addAll(computed);
+            existing.sort(Comparator.comparing(OfficeDayRecord::getDate).reversed());
+        }
+
+        log.debug("ensureRangeComputed: userId={}, range={} to {}, existing={}, computed={}",
+                user.getId(), start, effectiveEnd, existingDates.size(), computed.size());
+        return existing;
+    }
+
     @Observed(name = "rto.officedayrecord.compute",
             contextualName = "compute-office-day-record")
     public OfficeDayRecord compute(UUID userId, User user, LocalDate date) {

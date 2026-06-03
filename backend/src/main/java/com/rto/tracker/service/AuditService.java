@@ -4,7 +4,6 @@ import com.rto.tracker.domain.OfficeDayRecord;
 import com.rto.tracker.domain.User;
 import com.rto.tracker.domain.Zone;
 import com.rto.tracker.dto.AuditResponse;
-import com.rto.tracker.repository.OfficeDayRecordRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuditService {
 
-    private final OfficeDayRecordRepository recordRepository;
     private final OfficeDayCalculationService calculationService;
 
     @Transactional
@@ -27,10 +25,8 @@ public class AuditService {
 
         LocalDate effectiveEnd = endDate.isAfter(LocalDate.now()) ? LocalDate.now() : endDate;
 
-        ensureRecordsComputed(user, startDate, effectiveEnd);
-
-        List<OfficeDayRecord> records = recordRepository.findByUserIdAndDateRange(
-                user.getId(), startDate, effectiveEnd);
+        // Bulk ensure + fetch in one shot
+        List<OfficeDayRecord> records = calculationService.ensureRangeComputed(user, startDate, effectiveEnd);
 
         List<AuditResponse.AuditDayEntry> days = records.stream()
                 .filter(r -> !r.getOfficesVisited().isEmpty())
@@ -62,12 +58,7 @@ public class AuditService {
                 .lastOfficeExit(record.getLastOfficeExit())
                 .build();
     }
-
-    private void ensureRecordsComputed(User user, LocalDate start, LocalDate end) {
-        LocalDate date = start;
-        while (!date.isAfter(end)) {
-            calculationService.getOrCompute(user.getId(), user, date);
-            date = date.plusDays(1);
-        }
-    }
 }
+
+
+

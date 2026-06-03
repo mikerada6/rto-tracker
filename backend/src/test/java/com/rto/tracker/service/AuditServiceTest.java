@@ -38,12 +38,14 @@ class AuditServiceTest {
     @BeforeEach
     void setUp() {
         calculationService = new OfficeDayCalculationService(eventRepository, recordRepository, new SimpleMeterRegistry());
-        auditService = new AuditService(recordRepository, calculationService);
+        // AuditService now only needs OfficeDayCalculationService
+        auditService = new AuditService(calculationService);
 
         testUser = User.builder()
                 .id(UUID.randomUUID())
                 .email("test@example.com")
                 .displayName("Test User")
+                .timezone("UTC")
                 .build();
 
         officeZone = Zone.builder()
@@ -68,9 +70,7 @@ class AuditServiceTest {
         OfficeDayRecord nonOfficeDay = buildRecord(LocalDate.of(2026, 5, 2), Set.of(), 0L);
         OfficeDayRecord officeDay2 = buildRecord(LocalDate.of(2026, 5, 3), Set.of(officeZone), 14400L);
 
-        // Stub getOrCompute cache hits
-        when(recordRepository.findByUserIdAndDate(eq(testUser.getId()), any()))
-                .thenReturn(Optional.of(officeDay));
+        // ensureRangeComputed bulk-fetches existing records in one call
         when(recordRepository.findByUserIdAndDateRange(eq(testUser.getId()), eq(start), eq(end)))
                 .thenReturn(List.of(officeDay, nonOfficeDay, officeDay2));
 
@@ -88,7 +88,6 @@ class AuditServiceTest {
 
         OfficeDayRecord record = buildRecord(date, Set.of(officeZone), 27900L); // 7h 45m
 
-        when(recordRepository.findByUserIdAndDate(any(), any())).thenReturn(Optional.of(record));
         when(recordRepository.findByUserIdAndDateRange(any(), any(), any()))
                 .thenReturn(List.of(record));
 
@@ -105,7 +104,6 @@ class AuditServiceTest {
 
         OfficeDayRecord record = buildRecord(date, Set.of(secondOffice, officeZone), 28800L);
 
-        when(recordRepository.findByUserIdAndDate(any(), any())).thenReturn(Optional.of(record));
         when(recordRepository.findByUserIdAndDateRange(any(), any(), any()))
                 .thenReturn(List.of(record));
 
@@ -120,11 +118,11 @@ class AuditServiceTest {
         LocalDate start = LocalDate.now().minusDays(5);
         LocalDate futureEnd = LocalDate.now().plusDays(10);
 
-        when(recordRepository.findByUserIdAndDate(any(), any())).thenReturn(Optional.empty());
-        when(eventRepository.findByUserIdAndTimestampRange(any(), any(), any())).thenReturn(List.of());
-        when(recordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // No existing records in range; compute will be called for each day
         when(recordRepository.findByUserIdAndDateRange(eq(testUser.getId()), eq(start), eq(LocalDate.now())))
                 .thenReturn(List.of());
+        when(eventRepository.findByUserIdAndTimestampRange(any(), any(), any())).thenReturn(List.of());
+        when(recordRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AuditResponse response = auditService.getOfficeDayAudit(testUser, start, futureEnd);
 
@@ -137,11 +135,10 @@ class AuditServiceTest {
         LocalDate start = LocalDate.of(2026, 5, 1);
         LocalDate end = LocalDate.of(2026, 5, 7);
 
-        when(recordRepository.findByUserIdAndDate(any(), any())).thenReturn(Optional.empty());
+        // No existing records → compute all, but events are empty so no office visits
+        when(recordRepository.findByUserIdAndDateRange(any(), any(), any())).thenReturn(List.of());
         when(eventRepository.findByUserIdAndTimestampRange(any(), any(), any())).thenReturn(List.of());
-        when(recordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(recordRepository.findByUserIdAndDateRange(any(), any(), any()))
-                .thenReturn(List.of());
+        when(recordRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AuditResponse response = auditService.getOfficeDayAudit(testUser, start, end);
 
@@ -154,19 +151,17 @@ class AuditServiceTest {
         LocalDate start = LocalDate.of(2026, 5, 1);
         LocalDate end = LocalDate.of(2026, 5, 3);
 
-        // Cache miss: getOrCompute will compute fresh records
-        when(recordRepository.findByUserIdAndDate(any(), any())).thenReturn(Optional.empty());
+        // No existing records — ensureRangeComputed will compute missing dates
+        when(recordRepository.findByUserIdAndDateRange(any(), any(), any())).thenReturn(List.of());
         when(eventRepository.findByUserIdAndTimestampRange(any(), any(), any())).thenReturn(List.of());
-        when(recordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(recordRepository.findByUserIdAndDateRange(any(), any(), any()))
-                .thenReturn(List.of());
+        when(recordRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
         auditService.getOfficeDayAudit(testUser, start, end);
 
-        // ensureRecordsComputed calls getOrCompute for each day, which calls findByUserIdAndDate
-        verify(recordRepository).findByUserIdAndDate(testUser.getId(), LocalDate.of(2026, 5, 1));
-        verify(recordRepository).findByUserIdAndDate(testUser.getId(), LocalDate.of(2026, 5, 2));
-        verify(recordRepository).findByUserIdAndDate(testUser.getId(), LocalDate.of(2026, 5, 3));
+        // ensureRangeComputed fetches all existing in one bulk query
+        verify(recordRepository).findByUserIdAndDateRange(testUser.getId(), start, end);
+        // Missing dates are batch-saved
+        verify(recordRepository).saveAll(anyList());
     }
 
     private OfficeDayRecord buildRecord(LocalDate date, Set<Zone> offices, long officeTimeSeconds) {

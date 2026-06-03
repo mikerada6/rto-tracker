@@ -6,7 +6,6 @@ import com.rto.tracker.domain.ZoneEvent;
 import com.rto.tracker.dto.DashboardSummaryResponse;
 import com.rto.tracker.dto.PeriodStatsResponse;
 import com.rto.tracker.dto.QuarterReportResponse;
-import com.rto.tracker.repository.OfficeDayRecordRepository;
 import com.rto.tracker.repository.ZoneEventRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -28,16 +27,13 @@ import java.util.stream.Collectors;
 @Slf4j
 public class DashboardService {
 
-    private final OfficeDayRecordRepository recordRepository;
     private final OfficeDayCalculationService calculationService;
     private final ZoneEventRepository eventRepository;
     private final Counter dashboardRequestsCounter;
 
-    public DashboardService(OfficeDayRecordRepository recordRepository,
-                             OfficeDayCalculationService calculationService,
+    public DashboardService(OfficeDayCalculationService calculationService,
                              ZoneEventRepository eventRepository,
                              MeterRegistry meterRegistry) {
-        this.recordRepository = recordRepository;
         this.calculationService = calculationService;
         this.eventRepository = eventRepository;
         this.dashboardRequestsCounter = Counter.builder("rto.dashboard.requests")
@@ -66,14 +62,14 @@ public class DashboardService {
         LocalDate yearStart = today.withDayOfYear(1);
         LocalDate yearEnd = LocalDate.of(today.getYear(), 12, 31);
 
-        // Ensure all OfficeDayRecords are computed for the year range up to today
-        ensureRecordsComputed(user, yearStart, today);
+        // One bulk call: ensure all year records are computed, get them back in memory
+        List<OfficeDayRecord> yearRecords = calculationService.ensureRangeComputed(user, yearStart, today);
 
-        // Count office days per period
-        int weekDays = countOfficeDays(user.getId(), weekStart, today);
-        int monthDays = countOfficeDays(user.getId(), monthStart, today);
-        int quarterDays = countOfficeDays(user.getId(), quarterStart, today);
-        int yearDays = countOfficeDays(user.getId(), yearStart, today);
+        // Derive all counts from the in-memory list — no additional DB queries
+        int weekDays  = countFromRecords(yearRecords, weekStart,    today);
+        int monthDays = countFromRecords(yearRecords, monthStart,   today);
+        int quarterDays = countFromRecords(yearRecords, quarterStart, today);
+        int yearDays  = countFromRecords(yearRecords, yearStart,    today);
 
         PeriodStatsResponse weekStats = PeriodStatsResponse.from(
                 PeriodStatsCalculator.calculate(weekStart, weekEnd, today, weekDays, required));
@@ -84,9 +80,9 @@ public class DashboardService {
         PeriodStatsResponse yearStats = PeriodStatsResponse.from(
                 PeriodStatsCalculator.calculate(yearStart, yearEnd, today, yearDays, required));
 
-        List<DashboardSummaryResponse.RecentCommute> recentCommutes = getRecentCommutes(user, today);
+        List<DashboardSummaryResponse.RecentCommute> recentCommutes = getRecentCommutes(user, today, yearRecords);
         List<DashboardSummaryResponse.QuarterDayEntry> quarterOfficeDays =
-                buildQuarterDayEntries(user.getId(), quarterStart, today);
+                buildQuarterDayEntries(yearRecords, quarterStart, today);
 
         log.info("Dashboard summary computed: userId={}, weekDays={}, monthDays={}, quarterDays={}, yearDays={}",
                 user.getId(), weekDays, monthDays, quarterDays, yearDays);
@@ -122,9 +118,10 @@ public class DashboardService {
         LocalDate today = LocalDate.now();
         LocalDate effectiveEnd = today.isBefore(quarterEnd) ? today : quarterEnd;
 
-        ensureRecordsComputed(user, quarterStart, effectiveEnd);
+        // One bulk call — returns all records for the quarter
+        List<OfficeDayRecord> quarterRecords = calculationService.ensureRangeComputed(user, quarterStart, effectiveEnd);
 
-        int totalDays = countOfficeDays(user.getId(), quarterStart, effectiveEnd);
+        int totalDays = countFromRecords(quarterRecords, quarterStart, effectiveEnd);
 
         PeriodStatsCalculator.PeriodStats stats = PeriodStatsCalculator.calculate(
                 quarterStart, quarterEnd, today, totalDays, user.getRequiredDaysPerWeek());
@@ -132,7 +129,7 @@ public class DashboardService {
         boolean periodComplete = !today.isBefore(quarterEnd);
         boolean isCompliant = periodComplete && stats.daysStillNeeded() == 0;
 
-        // Monthly breakdown
+        // Monthly breakdown — no extra queries, filter from in-memory list
         List<QuarterReportResponse.MonthlyBreakdown> monthly = new ArrayList<>();
         LocalDate monthIter = quarterStart;
         while (!monthIter.isAfter(quarterEnd)) {
@@ -141,7 +138,7 @@ public class DashboardService {
             LocalDate mEffective = effectiveEnd.isBefore(mEnd) ? effectiveEnd : mEnd;
 
             if (!mStart.isAfter(effectiveEnd)) {
-                int mDays = countOfficeDays(user.getId(), mStart, mEffective);
+                int mDays = countFromRecords(quarterRecords, mStart, mEffective);
                 long mTotalDays = ChronoUnit.DAYS.between(mStart, mEnd) + 1;
                 double mWeeks = mTotalDays / 7.0;
                 long mElapsedDays = ChronoUnit.DAYS.between(mStart, mEffective) + 1;
@@ -171,27 +168,19 @@ public class DashboardService {
                 .build();
     }
 
-    private void ensureRecordsComputed(User user, LocalDate start, LocalDate end) {
-        // Only compute for dates up to today
-        LocalDate effectiveEnd = end.isAfter(LocalDate.now()) ? LocalDate.now() : end;
-        LocalDate date = start;
-        while (!date.isAfter(effectiveEnd)) {
-            calculationService.getOrCompute(user.getId(), user, date);
-            date = date.plusDays(1);
-        }
-    }
 
-    private int countOfficeDays(UUID userId, LocalDate start, LocalDate end) {
-        List<OfficeDayRecord> records = recordRepository.findByUserIdAndDateRange(userId, start, end);
+    /** Count office days from an already-loaded list (no DB query). */
+    private int countFromRecords(List<OfficeDayRecord> records, LocalDate start, LocalDate end) {
         return (int) records.stream()
+                .filter(r -> !r.getDate().isBefore(start) && !r.getDate().isAfter(end))
                 .filter(r -> !r.getOfficesVisited().isEmpty())
                 .count();
     }
 
     private List<DashboardSummaryResponse.QuarterDayEntry> buildQuarterDayEntries(
-            UUID userId, LocalDate quarterStart, LocalDate today) {
-        List<OfficeDayRecord> records = recordRepository.findByUserIdAndDateRange(userId, quarterStart, today);
+            List<OfficeDayRecord> records, LocalDate quarterStart, LocalDate today) {
         return records.stream()
+                .filter(r -> !r.getDate().isBefore(quarterStart) && !r.getDate().isAfter(today))
                 .filter(r -> !r.getOfficesVisited().isEmpty())
                 .map(r -> DashboardSummaryResponse.QuarterDayEntry.builder()
                         .date(r.getDate())
@@ -200,10 +189,12 @@ public class DashboardService {
                 .toList();
     }
 
-    private List<DashboardSummaryResponse.RecentCommute> getRecentCommutes(User user, LocalDate today) {
-        // Look back up to 30 days for recent commutes
+    private List<DashboardSummaryResponse.RecentCommute> getRecentCommutes(User user, LocalDate today, List<OfficeDayRecord> yearRecords) {
+        // Use already-loaded year records — no additional DB query needed
         LocalDate lookback = today.minusDays(30);
-        List<OfficeDayRecord> records = recordRepository.findByUserIdAndDateRange(user.getId(), lookback, today);
+        List<OfficeDayRecord> records = yearRecords.stream()
+                .filter(r -> !r.getDate().isBefore(lookback) && !r.getDate().isAfter(today))
+                .toList();
 
         return records.stream()
                 .filter(r -> r.getCommuteDuration() != null && r.getCommuteDuration() > 0)
