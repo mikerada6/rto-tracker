@@ -249,8 +249,18 @@ export function buildJourneyPhases(
   phases.push(officePhase);
 
   // ── Evening Commute ──
+  // Evening commute ends at the *first* home arrival after the office.
+  // Anything after that (leaving and returning home, etc.) is just being home,
+  // not an extension of the commute.
   if (lastOfficeIdx < segments.length - 1) {
-    const eveningSegs = segments.slice(lastOfficeIdx + 1);
+    const segsAfterOffice = segments.slice(lastOfficeIdx + 1);
+    const firstHomeRelIdx = segsAfterOffice.findIndex(s => s.zoneType === 'HOME' && !s.isMicroVisit);
+    const hasHomeArrival = firstHomeRelIdx !== -1;
+
+    // Commute itself includes the transit stops up to (but not including) the home stay
+    const eveningSegs = hasHomeArrival
+      ? segsAfterOffice.slice(0, firstHomeRelIdx + 1)
+      : segsAfterOffice;
     const eveningPhase = buildPhase('evening_commute', 'Evening Commute', eveningSegs);
 
     const firstEveningSeg = eveningSegs[0];
@@ -279,7 +289,28 @@ export function buildJourneyPhases(
       eveningPhase.startTime = lastOfficeSeg.departureTime;
     }
 
+    // Convert the trailing home stop into an endpoint marker — its dwell time
+    // is the user being home, not commute time.
+    if (hasHomeArrival) {
+      const homeStop = eveningPhase.stops[eveningPhase.stops.length - 1];
+      eveningPhase.totalDurationSeconds = Math.max(
+        0,
+        eveningPhase.totalDurationSeconds - homeStop.durationSeconds,
+      );
+      homeStop.durationSeconds = 0;
+      homeStop.departureTime = null;
+      homeStop.isPhaseEndpoint = true;
+      eveningPhase.endTime = homeStop.arrivalTime;
+    }
+
     phases.push(eveningPhase);
+
+    // Post-commute "Home" phase — captures the first home stay plus any
+    // subsequent leaves/returns. Keeps that time visible without inflating the commute.
+    if (hasHomeArrival) {
+      const homeSegs = segsAfterOffice.slice(firstHomeRelIdx);
+      phases.push(buildPhase('home', 'Home', homeSegs));
+    }
   }
 
   return mergeAnnotationsIntoPhases(phases, annotations, thresholdMinutes);

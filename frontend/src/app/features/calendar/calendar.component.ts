@@ -349,6 +349,50 @@ interface CalendarDay {
                   } @else {
                     <!-- Journey view -->
                     @for (phase of journeyPhases(); track $index) {
+                      @if (phase.type === 'office') {
+                        <!-- Office: a single "stayed at" block, not a journey. Distinct from commute cards. -->
+                        <div class="rounded-xl overflow-hidden bg-green-600/95 text-white shadow-sm">
+                          <div class="flex items-stretch">
+                            <div class="w-1.5 bg-green-300/70 flex-shrink-0"></div>
+                            <div class="flex-1 px-3 py-2.5">
+                              <div class="flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-2 min-w-0">
+                                  <span class="text-base">🏢</span>
+                                  <span class="text-[11px] font-semibold uppercase tracking-wider text-green-50">
+                                    {{ phase.label }}
+                                  </span>
+                                </div>
+                                <span class="text-sm font-bold tabular-nums">
+                                  {{ formatDur(phase.totalDurationSeconds) }}
+                                </span>
+                              </div>
+                              <div class="mt-1.5 space-y-1">
+                                @for (stop of phase.stops; track $index) {
+                                  @if (!stop.isMicroVisit) {
+                                    <div class="flex items-center justify-between gap-2">
+                                      <p class="text-xs font-semibold text-white truncate">
+                                        <span class="mr-1">{{ zoneTypeIcon(stop.zoneType) }}</span>{{ stop.zone }}
+                                      </p>
+                                      <p class="text-[10px] font-mono text-green-100">
+                                        @if (stop.isImplicitArrival) {
+                                          <span class="italic text-green-200">departed </span>{{ stop.departureTime | date:'HH:mm' }}
+                                        } @else {
+                                          {{ stop.arrivalTime | date:'HH:mm' }}
+                                          @if (stop.departureTime) {
+                                            <span class="text-green-200"> → </span>{{ stop.departureTime | date:'HH:mm' }}
+                                          } @else {
+                                            <span class="italic text-green-200"> ongoing</span>
+                                          }
+                                        }
+                                      </p>
+                                    </div>
+                                  }
+                                }
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      } @else {
                       <div class="rounded-xl border overflow-hidden"
                            [class]="phaseContainerClass(phase.type)">
 
@@ -468,6 +512,7 @@ interface CalendarDay {
                           }
                         </div>
                       </div>
+                      }
                     }
                   }
                 </div>
