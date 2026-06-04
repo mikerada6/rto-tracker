@@ -304,13 +304,6 @@ export function buildJourneyPhases(
     }
 
     phases.push(eveningPhase);
-
-    // Post-commute "Home" phase — captures the first home stay plus any
-    // subsequent leaves/returns. Keeps that time visible without inflating the commute.
-    if (hasHomeArrival) {
-      const homeSegs = segsAfterOffice.slice(firstHomeRelIdx);
-      phases.push(buildPhase('home', 'Home', homeSegs));
-    }
   }
 
   return mergeAnnotationsIntoPhases(phases, annotations, thresholdMinutes);
