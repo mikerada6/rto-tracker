@@ -158,7 +158,27 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
           @if (newApiKey()) {
             <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm" role="alert">
               <p class="font-medium text-amber-800 mb-1">New API Key (shown once):</p>
-              <code class="text-xs break-all select-all text-gray-900">{{ newApiKey() }}</code>
+              <div class="flex items-start gap-2">
+                <code class="flex-1 text-xs break-all select-all text-gray-900">{{ newApiKey() }}</code>
+                <button
+                  (click)="copyApiKey()"
+                  [attr.aria-label]="apiKeyCopied() ? 'API key copied' : 'Copy API key'"
+                  class="flex-shrink-0 min-h-[2rem] px-2.5 py-1 text-xs font-medium rounded-md border transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-1"
+                  [class.bg-green-600]="apiKeyCopied()"
+                  [class.text-white]="apiKeyCopied()"
+                  [class.border-green-600]="apiKeyCopied()"
+                  [class.bg-white]="!apiKeyCopied()"
+                  [class.text-amber-800]="!apiKeyCopied()"
+                  [class.border-amber-300]="!apiKeyCopied()"
+                  [class.hover:bg-amber-100]="!apiKeyCopied()"
+                >
+                  @if (apiKeyCopied()) {
+                    ✓ Copied
+                  } @else {
+                    Copy
+                  }
+                </button>
+              </div>
               <p class="text-amber-600 mt-2 text-xs">Update your Home Assistant configuration with this new key.</p>
             </div>
           }
@@ -223,7 +243,9 @@ export class SettingsComponent implements OnInit {
   readonly saving = signal(false);
   readonly regenerating = signal(false);
   readonly newApiKey = signal('');
+  readonly apiKeyCopied = signal(false);
   readonly showRegenConfirm = signal(false);
+  private apiKeyCopiedTimer: ReturnType<typeof setTimeout> | null = null;
 
   displayName = '';
   requiredDays = 3;
@@ -358,6 +380,7 @@ export class SettingsComponent implements OnInit {
     this.userService.regenerateApiKey().subscribe({
       next: (res) => {
         this.newApiKey.set(res.apiKey);
+        this.apiKeyCopied.set(false);
         this.regenerating.set(false);
         this.toast.success('API key regenerated — copy it now!');
       },
@@ -366,6 +389,19 @@ export class SettingsComponent implements OnInit {
         this.toast.error('Failed to regenerate API key.');
       }
     });
+  }
+
+  async copyApiKey(): Promise<void> {
+    const key = this.newApiKey();
+    if (!key) return;
+    try {
+      await navigator.clipboard.writeText(key);
+      this.apiKeyCopied.set(true);
+      if (this.apiKeyCopiedTimer) clearTimeout(this.apiKeyCopiedTimer);
+      this.apiKeyCopiedTimer = setTimeout(() => this.apiKeyCopied.set(false), 2000);
+    } catch {
+      this.toast.error('Copy failed — select and copy manually.');
+    }
   }
 
   logout(): void {

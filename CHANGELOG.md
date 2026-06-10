@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Settings: copy-to-clipboard button on the post-regeneration API key alert,
+  with a "✓ Copied" confirmation that reverts after 2 seconds.
+
 ## [1.0.0] - 2026-06-10
 
 First production release. Stable after two weeks of live use against a real
