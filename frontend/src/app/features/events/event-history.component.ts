@@ -5,7 +5,7 @@ import { EventService } from '../../core/services/event.service';
 import { ZoneService } from '../../core/services/zone.service';
 import { ZoneEventResponse } from '../../core/models/event.model';
 import { ZoneResponse } from '../../core/models/zone.model';
-import { format, subDays } from 'date-fns';
+import { format, subDays, startOfMonth, startOfQuarter } from 'date-fns';
 import { ToastService } from '../../shared/services/toast.service';
 import { SkeletonComponent } from '../../shared/components/skeleton.component';
 
@@ -25,16 +25,38 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
+        <!-- Quick date presets -->
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-gray-500 mr-1">Quick range:</span>
+          @for (preset of datePresets; track preset.key) {
+            <button
+              type="button"
+              (click)="applyDatePreset(preset.key)"
+              [attr.aria-pressed]="activePreset() === preset.key"
+              class="px-2.5 py-1 text-xs font-medium rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+              [class.bg-blue-600]="activePreset() === preset.key"
+              [class.text-white]="activePreset() === preset.key"
+              [class.border-blue-600]="activePreset() === preset.key"
+              [class.bg-white]="activePreset() !== preset.key"
+              [class.text-gray-700]="activePreset() !== preset.key"
+              [class.border-gray-300]="activePreset() !== preset.key"
+              [class.hover:bg-gray-50]="activePreset() !== preset.key"
+            >
+              {{ preset.label }}
+            </button>
+          }
+        </div>
+
         <div class="flex flex-wrap items-end gap-4">
           <div>
             <label class="block text-xs text-gray-500 mb-1">Start Date</label>
-            <input type="date" [(ngModel)]="startDate" (change)="loadEvents()"
+            <input type="date" [(ngModel)]="startDate" (change)="onDateRangeChange()"
               class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">End Date</label>
-            <input type="date" [(ngModel)]="endDate" (change)="loadEvents()"
+            <input type="date" [(ngModel)]="endDate" (change)="onDateRangeChange()"
               class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
           <div>
@@ -261,6 +283,38 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
           <div class="bg-white rounded-2xl p-6 w-full max-w-lg" (click)="$event.stopPropagation()">
             <h2 class="text-lg font-semibold text-gray-900 mb-4">Import CSV</h2>
             <div class="space-y-4">
+              <!-- Format documentation -->
+              <details class="rounded-lg border border-gray-200 bg-gray-50 text-sm">
+                <summary class="px-3 py-2 cursor-pointer font-medium text-gray-700 hover:bg-gray-100 rounded-lg list-none flex items-center justify-between">
+                  <span>Expected CSV format</span>
+                  <span class="text-xs text-gray-400">click to expand</span>
+                </summary>
+                <div class="px-3 pb-3 pt-1 text-xs text-gray-600 space-y-2">
+                  <p>Header row required. Four comma-separated columns in this order:</p>
+                  <pre class="bg-white border border-gray-200 rounded p-2 font-mono text-[11px] overflow-x-auto"><span class="text-gray-400">Date,Time,Zone,Type
+</span>6/10/26,9:02:14,Home,Departed
+6/10/26,9:47:30,Office,Arrived
+6/10/26,17:32:05,Office,Departed</pre>
+                  <ul class="list-disc pl-4 space-y-1 text-gray-600">
+                    <li><span class="font-medium text-gray-700">Date</span> — <code class="text-[11px]">M/d/yy</code> e.g. <code class="text-[11px]">6/10/26</code></li>
+                    <li><span class="font-medium text-gray-700">Time</span> — <code class="text-[11px]">H:mm:ss</code> in your account timezone, 24-hour, e.g. <code class="text-[11px]">17:32:05</code></li>
+                    <li><span class="font-medium text-gray-700">Zone</span> — any label; you map each unique value to a real zone below</li>
+                    <li><span class="font-medium text-gray-700">Type</span> — must be <code class="text-[11px]">Arrived</code> or <code class="text-[11px]">Departed</code> (case-insensitive)</li>
+                  </ul>
+                  <p class="text-gray-500">Duplicate events are skipped — re-running the same file is safe.</p>
+                  <button
+                    type="button"
+                    (click)="downloadSampleCsv(); $event.stopPropagation()"
+                    class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                    </svg>
+                    Download sample CSV
+                  </button>
+                </div>
+              </details>
+
               <!-- File drop -->
               <div
                 class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center"
@@ -361,6 +415,16 @@ export class EventHistoryComponent implements OnInit {
   selectedZoneId = '';
   selectedType = '';
 
+  readonly datePresets = [
+    { key: 'today', label: 'Today' },
+    { key: 'last7', label: 'Last 7 days' },
+    { key: 'last30', label: 'Last 30 days' },
+    { key: 'month', label: 'This month' },
+    { key: 'quarter', label: 'This quarter' },
+  ] as const;
+
+  readonly activePreset = signal<string | null>('last30');
+
   readonly sortedEvents = computed(() => {
     const col = this.sortColumn();
     if (!col) return this.events();
@@ -427,6 +491,45 @@ export class EventHistoryComponent implements OnInit {
       },
       error: () => this.toast.error('Failed to delete event.')
     });
+  }
+
+  applyDatePreset(key: string): void {
+    const now = new Date();
+    let start: Date;
+    switch (key) {
+      case 'today':   start = now; break;
+      case 'last7':   start = subDays(now, 6); break;
+      case 'last30':  start = subDays(now, 29); break;
+      case 'month':   start = startOfMonth(now); break;
+      case 'quarter': start = startOfQuarter(now); break;
+      default: return;
+    }
+    this.startDate = format(start, 'yyyy-MM-dd');
+    this.endDate = format(now, 'yyyy-MM-dd');
+    this.activePreset.set(key);
+    this.loadEvents();
+  }
+
+  onDateRangeChange(): void {
+    this.activePreset.set(null);
+    this.loadEvents();
+  }
+
+  downloadSampleCsv(): void {
+    const sample =
+      'Date,Time,Zone,Type\n' +
+      '6/10/26,9:02:14,Home,Departed\n' +
+      '6/10/26,9:47:30,Office,Arrived\n' +
+      '6/10/26,17:32:05,Office,Departed\n';
+    const blob = new Blob([sample], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'rto-tracker-sample.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   loadEvents(): void {
