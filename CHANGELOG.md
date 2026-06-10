@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings: copy-to-clipboard button on the post-regeneration API key alert,
   with a "✓ Copied" confirmation that reverts after 2 seconds.
 
+### Changed
+- Zones: redesigned empty state with a prominent "Add your first zone" CTA
+  and a short explanation of what zones are for, so first-time users have
+  an obvious next action instead of hunting for the top-right button.
+
 ## [1.0.0] - 2026-06-10
 
 First production release. Stable after two weeks of live use against a real
