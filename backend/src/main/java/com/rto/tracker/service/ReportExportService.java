@@ -52,24 +52,24 @@ public class ReportExportService {
     private final ZoneEventRepository eventRepository;
     private final TemplateEngine templateEngine;
 
-    public Range resolveRange(ReportPeriod period, LocalDate from, LocalDate to, LocalDate today) {
+    public Range resolveRange(ReportPeriod period, LocalDate from, LocalDate to, LocalDate anchor) {
         return switch (period) {
             case WEEK -> {
-                LocalDate start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                LocalDate start = anchor.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
                 yield new Range(start, start.plusDays(6));
             }
             case MONTH -> {
-                YearMonth ym = YearMonth.from(today);
+                YearMonth ym = YearMonth.from(anchor);
                 yield new Range(ym.atDay(1), ym.atEndOfMonth());
             }
             case QUARTER -> {
-                int q = (today.getMonthValue() - 1) / 3;
-                LocalDate start = LocalDate.of(today.getYear(), q * 3 + 1, 1);
+                int q = (anchor.getMonthValue() - 1) / 3;
+                LocalDate start = LocalDate.of(anchor.getYear(), q * 3 + 1, 1);
                 yield new Range(start, start.plusMonths(3).minusDays(1));
             }
             case YEAR -> new Range(
-                    LocalDate.of(today.getYear(), 1, 1),
-                    LocalDate.of(today.getYear(), 12, 31)
+                    LocalDate.of(anchor.getYear(), 1, 1),
+                    LocalDate.of(anchor.getYear(), 12, 31)
             );
             case CUSTOM -> {
                 if (from == null || to == null) {
@@ -88,8 +88,10 @@ public class ReportExportService {
         };
     }
 
-    public byte[] generatePdf(User user, ReportPeriod period, LocalDate from, LocalDate to) {
-        Range range = resolveRange(period, from, to, LocalDate.now());
+    public byte[] generatePdf(User user, ReportPeriod period, LocalDate from, LocalDate to, LocalDate anchor) {
+        LocalDate today = LocalDate.now();
+        LocalDate effectiveAnchor = anchor != null ? anchor : today;
+        Range range = resolveRange(period, from, to, effectiveAnchor);
         ZoneId userZone = ZoneId.of(user.getTimezone());
 
         Instant startInstant = range.start().atStartOfDay(userZone).toInstant();
@@ -106,10 +108,11 @@ public class ReportExportService {
                 .periodStart(range.start())
                 .periodEnd(range.end())
                 .generatedAt(GENERATED_FORMATTER.format(ZonedDateTime.now(userZone)))
+                .asOfDate(today)
                 .rows(buildRows(firstEntries, userZone))
                 .weeklyBuckets(buildWeeklyBuckets(range, firstEntries.keySet()))
                 .summary(buildSummary(range, firstEntries.size(),
-                        user.getRequiredDaysPerWeek().doubleValue()))
+                        user.getRequiredDaysPerWeek().doubleValue(), today))
                 .build();
 
         return render(data);
@@ -180,23 +183,70 @@ public class ReportExportService {
         return 8;
     }
 
-    ReportExportData.Summary buildSummary(Range range, int daysInOffice, double requiredDaysPerWeek) {
+    ReportExportData.Summary buildSummary(Range range, int daysInOffice,
+                                           double requiredDaysPerWeek, LocalDate today) {
         long totalDays = ChronoUnit.DAYS.between(range.start(), range.end()) + 1;
         double totalWeeks = totalDays / 7.0;
         int requiredDays = (int) Math.ceil(requiredDaysPerWeek * totalWeeks);
-        double averagePerWeek = totalWeeks > 0 ? daysInOffice / totalWeeks : 0.0;
-        int compliancePercent = requiredDays == 0
-                ? 100
-                : (int) Math.round((daysInOffice * 100.0) / requiredDays);
-        boolean compliant = averagePerWeek + 1e-9 >= requiredDaysPerWeek;
+
+        boolean inProgress = range.end().isAfter(today) && !range.start().isAfter(today);
+        // Exclusive count of days completed *before* today, so day 1 of a period
+        // has 0 elapsed days. Aligns "pace so far" with completed weeks.
+        long elapsedDays = inProgress
+                ? Math.max(0, ChronoUnit.DAYS.between(range.start(), today))
+                : totalDays;
+        double weeksElapsed = elapsedDays / 7.0;
+        // Inclusive remaining: today itself is still an opportunity.
+        long remainingDays = inProgress
+                ? Math.max(0, ChronoUnit.DAYS.between(today, range.end()) + 1)
+                : 0;
+        double weeksRemaining = remainingDays / 7.0;
+
+        double pacePerWeek = weeksElapsed > 0 ? daysInOffice / weeksElapsed : 0.0;
+        int daysStillNeeded = Math.max(0, requiredDays - daysInOffice);
+        Double requiredPaceRemainder = (inProgress && weeksRemaining > 0 && daysStillNeeded > 0)
+                ? round(daysStillNeeded / weeksRemaining, 2)
+                : null;
+
+        int compliancePercent;
+        if (inProgress) {
+            // Pace-relative: actual vs what we'd expect at target pace by now.
+            int expectedSoFar = (int) Math.ceil(requiredDaysPerWeek * weeksElapsed);
+            compliancePercent = expectedSoFar == 0
+                    ? 100
+                    : (int) Math.round((daysInOffice * 100.0) / expectedSoFar);
+        } else {
+            compliancePercent = requiredDays == 0
+                    ? 100
+                    : (int) Math.round((daysInOffice * 100.0) / requiredDays);
+        }
+
+        boolean compliant;
+        String statusLabel;
+        if (inProgress) {
+            // "On pace" if the employee can still hit target by maintaining
+            // the required rate through the remaining days.
+            int maxCatchupAtTargetPace = (int) Math.ceil(requiredDaysPerWeek * weeksRemaining);
+            compliant = daysStillNeeded <= maxCatchupAtTargetPace;
+            statusLabel = compliant ? "On pace" : "Behind pace";
+        } else {
+            compliant = daysInOffice >= requiredDays;
+            statusLabel = compliant ? "Met target" : "Below target";
+        }
+
         return ReportExportData.Summary.builder()
                 .daysInOffice(daysInOffice)
                 .requiredDays(requiredDays)
                 .totalWeeks(round(totalWeeks, 1))
                 .requiredDaysPerWeek(requiredDaysPerWeek)
-                .averagePerWeek(round(averagePerWeek, 2))
+                .averagePerWeek(round(pacePerWeek, 2))
                 .compliancePercent(Math.min(compliancePercent, 999))
                 .compliant(compliant)
+                .inProgress(inProgress)
+                .statusLabel(statusLabel)
+                .weeksRemaining(round(weeksRemaining, 1))
+                .daysStillNeeded(daysStillNeeded)
+                .requiredPaceRemainder(requiredPaceRemainder)
                 .build();
     }
 

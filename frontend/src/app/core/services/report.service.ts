@@ -21,10 +21,11 @@ export class ReportService {
     return this.http.get<QuarterReportResponse>('/api/v1/reports/quarter/current');
   }
 
-  exportPdf(period: ReportPeriod, from?: string, to?: string): Observable<HttpResponse<Blob>> {
+  exportPdf(period: ReportPeriod, from?: string, to?: string, anchor?: string): Observable<HttpResponse<Blob>> {
     let params = new HttpParams().set('period', period);
     if (from) params = params.set('from', from);
     if (to) params = params.set('to', to);
+    if (anchor) params = params.set('anchor', anchor);
     return this.http.get('/api/v1/reports/export/pdf', {
       params,
       responseType: 'blob',

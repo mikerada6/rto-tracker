@@ -48,14 +48,16 @@ public class ReportExportController {
             @RequestParam(name = "from", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(name = "to", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(name = "anchor", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate anchor) {
 
-        log.info("PDF report export requested: userId={}, period={}, from={}, to={}",
-                user.getId(), period, from, to);
+        log.info("PDF report export requested: userId={}, period={}, from={}, to={}, anchor={}",
+                user.getId(), period, from, to, anchor);
 
-        byte[] pdf = reportExportService.generatePdf(user, period, from, to);
+        byte[] pdf = reportExportService.generatePdf(user, period, from, to, anchor);
 
-        String filename = buildFilename(user, period, from, to);
+        String filename = buildFilename(user, period, from, to, anchor);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);
         headers.setContentDisposition(ContentDisposition.attachment()
@@ -69,14 +71,16 @@ public class ReportExportController {
         return ResponseEntity.ok().headers(headers).body(pdf);
     }
 
-    private String buildFilename(User user, ReportPeriod period, LocalDate from, LocalDate to) {
+    private String buildFilename(User user, ReportPeriod period,
+                                  LocalDate from, LocalDate to, LocalDate anchor) {
         String slug = user.getDisplayName().toLowerCase()
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("(^-|-$)", "");
         if (slug.isEmpty()) slug = "user";
         String suffix = switch (period) {
             case CUSTOM -> (from != null ? from : LocalDate.now()) + "_" + (to != null ? to : LocalDate.now());
-            default -> period.name().toLowerCase();
+            default -> period.name().toLowerCase()
+                    + (anchor != null ? "-" + anchor : "");
         };
         return "rto-report-" + slug + "-" + suffix + ".pdf";
     }

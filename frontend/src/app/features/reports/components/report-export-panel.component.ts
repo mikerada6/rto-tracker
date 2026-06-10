@@ -1,5 +1,10 @@
 import { Component, signal, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import {
+  addDays, addMonths, addQuarters, addYears,
+  format, isAfter,
+  startOfMonth, startOfQuarter, startOfWeek, startOfYear
+} from 'date-fns';
 import { ReportService, ReportPeriod } from '../../../core/services/report.service';
 
 interface PeriodOption { value: ReportPeriod; label: string; }
@@ -28,6 +33,40 @@ interface PeriodOption { value: ReportPeriod; label: string; }
           >{{ opt.label }}</button>
         }
       </div>
+
+      @if (period() !== 'CUSTOM') {
+        <div class="flex items-center gap-3 mb-4">
+          <button
+            type="button"
+            (click)="stepAnchor(-1)"
+            class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+            aria-label="Previous period"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+              <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 0 1-.02 1.06L8.832 10l3.938 3.71a.75.75 0 1 1-1.04 1.08l-4.5-4.25a.75.75 0 0 1 0-1.08l4.5-4.25a.75.75 0 0 1 1.06.02Z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <div class="min-w-[160px] text-center font-semibold text-gray-900">{{ anchorLabel() }}</div>
+          <button
+            type="button"
+            (click)="stepAnchor(1)"
+            [disabled]="atCurrentPeriod()"
+            class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            aria-label="Next period"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+              <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          @if (!atCurrentPeriod()) {
+            <button
+              type="button"
+              (click)="resetAnchor()"
+              class="text-sm text-blue-600 hover:underline ml-2"
+            >Jump to current</button>
+          }
+        </div>
+      }
 
       @if (period() === 'CUSTOM') {
         <div class="flex flex-wrap items-end gap-3 mb-4">
@@ -84,20 +123,42 @@ export class ReportExportPanelComponent {
   private readonly reportService = inject(ReportService);
 
   readonly periods: PeriodOption[] = [
-    { value: 'WEEK', label: 'This week' },
-    { value: 'MONTH', label: 'This month' },
-    { value: 'QUARTER', label: 'This quarter' },
-    { value: 'YEAR', label: 'This year' },
+    { value: 'WEEK', label: 'Week' },
+    { value: 'MONTH', label: 'Month' },
+    { value: 'QUARTER', label: 'Quarter' },
+    { value: 'YEAR', label: 'Year' },
     { value: 'CUSTOM', label: 'Custom' }
   ];
 
-  readonly todayStr = new Date().toISOString().slice(0, 10);
+  private readonly today = new Date();
+  readonly todayStr = format(this.today, 'yyyy-MM-dd');
 
   readonly period = signal<ReportPeriod>('MONTH');
+  readonly anchor = signal<Date>(this.today);
   readonly from = signal('');
   readonly to = signal('');
   readonly exporting = signal(false);
   readonly errorMessage = signal('');
+
+  readonly anchorLabel = computed(() => this.formatPeriodLabel(this.period(), this.anchor()));
+
+  readonly atCurrentPeriod = computed(() => {
+    const a = this.anchor();
+    const t = this.today;
+    switch (this.period()) {
+      case 'WEEK':
+        return startOfWeek(a, { weekStartsOn: 1 }).getTime()
+            === startOfWeek(t, { weekStartsOn: 1 }).getTime();
+      case 'MONTH':
+        return a.getFullYear() === t.getFullYear() && a.getMonth() === t.getMonth();
+      case 'QUARTER':
+        return startOfQuarter(a).getTime() === startOfQuarter(t).getTime();
+      case 'YEAR':
+        return a.getFullYear() === t.getFullYear();
+      default:
+        return true;
+    }
+  });
 
   readonly customRangeError = computed(() => {
     if (this.period() !== 'CUSTOM') return '';
@@ -117,7 +178,28 @@ export class ReportExportPanelComponent {
 
   selectPeriod(value: ReportPeriod): void {
     this.period.set(value);
+    this.resetAnchor();
     this.errorMessage.set('');
+  }
+
+  stepAnchor(direction: -1 | 1): void {
+    if (direction === 1 && this.atCurrentPeriod()) return;
+    const a = this.anchor();
+    let next: Date;
+    switch (this.period()) {
+      case 'WEEK':    next = addDays(a, direction * 7); break;
+      case 'MONTH':   next = addMonths(a, direction); break;
+      case 'QUARTER': next = addQuarters(a, direction); break;
+      case 'YEAR':    next = addYears(a, direction); break;
+      default: return;
+    }
+    // Forward step must not land in a future period (vs today).
+    if (direction === 1 && this.isPeriodAfterToday(this.period(), next)) return;
+    this.anchor.set(next);
+  }
+
+  resetAnchor(): void {
+    this.anchor.set(this.today);
   }
 
   exportPdf(): void {
@@ -125,8 +207,9 @@ export class ReportExportPanelComponent {
     this.exporting.set(true);
     const from = this.period() === 'CUSTOM' ? this.from() : undefined;
     const to = this.period() === 'CUSTOM' ? this.to() : undefined;
+    const anchor = this.period() === 'CUSTOM' ? undefined : format(this.anchor(), 'yyyy-MM-dd');
 
-    this.reportService.exportPdf(this.period(), from, to).subscribe({
+    this.reportService.exportPdf(this.period(), from, to, anchor).subscribe({
       next: (response) => {
         const blob = response.body;
         if (!blob) {
@@ -145,6 +228,30 @@ export class ReportExportPanelComponent {
         this.exporting.set(false);
       }
     });
+  }
+
+  private formatPeriodLabel(period: ReportPeriod, date: Date): string {
+    switch (period) {
+      case 'WEEK': {
+        const mon = startOfWeek(date, { weekStartsOn: 1 });
+        return `Week of ${format(mon, 'MMM d, yyyy')}`;
+      }
+      case 'MONTH':   return format(date, 'MMMM yyyy');
+      case 'QUARTER': return `Q${Math.floor(date.getMonth() / 3) + 1} ${date.getFullYear()}`;
+      case 'YEAR':    return `${date.getFullYear()}`;
+      default:        return '';
+    }
+  }
+
+  private isPeriodAfterToday(period: ReportPeriod, date: Date): boolean {
+    const t = this.today;
+    switch (period) {
+      case 'WEEK':    return isAfter(startOfWeek(date, { weekStartsOn: 1 }), startOfWeek(t, { weekStartsOn: 1 }));
+      case 'MONTH':   return isAfter(startOfMonth(date), startOfMonth(t));
+      case 'QUARTER': return isAfter(startOfQuarter(date), startOfQuarter(t));
+      case 'YEAR':    return isAfter(startOfYear(date), startOfYear(t));
+      default:        return false;
+    }
   }
 
   private filenameFromHeader(header: string | null): string | null {

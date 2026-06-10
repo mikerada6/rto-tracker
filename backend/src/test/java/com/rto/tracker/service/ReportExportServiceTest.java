@@ -13,6 +13,7 @@ import java.util.TreeMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 class ReportExportServiceTest {
 
@@ -104,35 +105,155 @@ class ReportExportServiceTest {
     }
 
     @Test
-    void summary_perfectlyOnTarget_isCompliant() {
-        // 4 weeks @ 3.0/wk = 12 required, 12 in office
+    void summary_completePeriodPerfectlyOnTarget_isCompliant() {
+        // 4 weeks @ 3.0/wk = 12 required, 12 in office. Period ends before today.
         ReportExportService.Range r = new ReportExportService.Range(
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 28));
-        ReportExportData.Summary s = service.buildSummary(r, 12, 3.0);
+        ReportExportData.Summary s = service.buildSummary(r, 12, 3.0,
+                LocalDate.of(2026, 7, 1));
         assertThat(s.daysInOffice()).isEqualTo(12);
         assertThat(s.requiredDays()).isEqualTo(12);
         assertThat(s.averagePerWeek()).isEqualTo(3.0);
         assertThat(s.compliancePercent()).isEqualTo(100);
         assertThat(s.compliant()).isTrue();
+        assertThat(s.inProgress()).isFalse();
+        assertThat(s.statusLabel()).isEqualTo("Met target");
     }
 
     @Test
-    void summary_belowTarget_isNonCompliant() {
+    void summary_completePeriodBelowTarget_isNonCompliant() {
         ReportExportService.Range r = new ReportExportService.Range(
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 28));
-        ReportExportData.Summary s = service.buildSummary(r, 8, 3.0);
+        ReportExportData.Summary s = service.buildSummary(r, 8, 3.0,
+                LocalDate.of(2026, 7, 1));
         assertThat(s.averagePerWeek()).isEqualTo(2.0);
         assertThat(s.compliant()).isFalse();
         assertThat(s.compliancePercent()).isEqualTo(67); // 8 / 12 * 100
+        assertThat(s.inProgress()).isFalse();
+        assertThat(s.statusLabel()).isEqualTo("Below target");
     }
 
     @Test
-    void summary_emptyRange_does_not_crash() {
+    void summary_emptyRange_doesNotCrash() {
         ReportExportService.Range r = new ReportExportService.Range(
                 LocalDate.of(2026, 6, 8), LocalDate.of(2026, 6, 14));
-        ReportExportData.Summary s = service.buildSummary(r, 0, 3.0);
+        ReportExportData.Summary s = service.buildSummary(r, 0, 3.0,
+                LocalDate.of(2026, 7, 1));
         assertThat(s.daysInOffice()).isZero();
         assertThat(s.compliant()).isFalse();
+    }
+
+    // --- In-progress periods ---
+
+    @Test
+    void summary_inProgressQuarter_atPace_showsOnPace() {
+        // Q2 2026: Apr 1 – Jun 30. Today = May 27 (mid quarter). 8 weeks elapsed,
+        // 5 weeks remaining. Pace = 24/8 = 3.0/wk → on pace.
+        ReportExportService.Range r = new ReportExportService.Range(
+                LocalDate.of(2026, 4, 1), LocalDate.of(2026, 6, 30));
+        ReportExportData.Summary s = service.buildSummary(r, 24, 3.0,
+                LocalDate.of(2026, 5, 27));
+        assertThat(s.inProgress()).isTrue();
+        assertThat(s.statusLabel()).isEqualTo("On pace");
+        assertThat(s.compliant()).isTrue();
+        assertThat(s.averagePerWeek()).isCloseTo(3.0, within(0.05));
+        assertThat(s.weeksRemaining()).isCloseTo(5.0, within(0.1));
+    }
+
+    @Test
+    void summary_inProgressQuarter_belowPace_showsBehindPace() {
+        // Same quarter, 12 days in office instead of 24. Pace = 12/8 = 1.5/wk → behind.
+        ReportExportService.Range r = new ReportExportService.Range(
+                LocalDate.of(2026, 4, 1), LocalDate.of(2026, 6, 30));
+        ReportExportData.Summary s = service.buildSummary(r, 12, 3.0,
+                LocalDate.of(2026, 5, 27));
+        assertThat(s.inProgress()).isTrue();
+        assertThat(s.statusLabel()).isEqualTo("Behind pace");
+        assertThat(s.compliant()).isFalse();
+        // 27 still needed across ~5 weeks ≈ 5.4/wk
+        assertThat(s.requiredPaceRemainder()).isCloseTo(5.4, within(0.2));
+    }
+
+    @Test
+    void summary_inProgress_firstDayOfPeriod_treatedAsOnPace() {
+        // Day 1 of the quarter: no time has elapsed yet, no data — don't flag
+        // "Behind" just because nothing has happened.
+        ReportExportService.Range r = new ReportExportService.Range(
+                LocalDate.of(2026, 4, 1), LocalDate.of(2026, 6, 30));
+        ReportExportData.Summary s = service.buildSummary(r, 0, 3.0,
+                LocalDate.of(2026, 4, 1));
+        assertThat(s.inProgress()).isTrue();
+        assertThat(s.statusLabel()).isEqualTo("On pace");
+    }
+
+    @Test
+    void summary_inProgress_compliancePercentReflectsPace_notFullPeriod() {
+        // If we judged against full-period target, 12 days into Q2 would be
+        // ~31% compliant. Pace-relative it should be 12/24 = 50%.
+        ReportExportService.Range r = new ReportExportService.Range(
+                LocalDate.of(2026, 4, 1), LocalDate.of(2026, 6, 30));
+        ReportExportData.Summary s = service.buildSummary(r, 12, 3.0,
+                LocalDate.of(2026, 5, 27));
+        assertThat(s.compliancePercent()).isBetween(45, 55);
+    }
+
+    @Test
+    void summary_futureRange_treatedAsNotInProgress() {
+        // Anchor in the past producing a future quarter (edge case via custom).
+        ReportExportService.Range r = new ReportExportService.Range(
+                LocalDate.of(2027, 1, 1), LocalDate.of(2027, 3, 31));
+        ReportExportData.Summary s = service.buildSummary(r, 0, 3.0,
+                LocalDate.of(2026, 6, 10));
+        assertThat(s.inProgress()).isFalse();
+    }
+
+    // --- Anchor-driven range resolution ---
+
+    @Test
+    void resolveRange_quarter_anchoredToPreviousQuarter_lateInYear() {
+        // Today April 1 2026; user picks Q1 → anchor = March 15 2026.
+        // Result: Jan 1 – Mar 31, 2026 (previous quarter, same year).
+        ReportExportService.Range r = service.resolveRange(
+                ReportPeriod.QUARTER, null, null, LocalDate.of(2026, 3, 15));
+        assertThat(r.start()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(r.end()).isEqualTo(LocalDate.of(2026, 3, 31));
+    }
+
+    @Test
+    void resolveRange_quarter_anchoredAcrossYearBoundary() {
+        // Today Jan 1 2027; user picks "last quarter" → anchor = Oct 15 2026.
+        // Result: Oct 1 – Dec 31, 2026 (previous year's Q4).
+        ReportExportService.Range r = service.resolveRange(
+                ReportPeriod.QUARTER, null, null, LocalDate.of(2026, 10, 15));
+        assertThat(r.start()).isEqualTo(LocalDate.of(2026, 10, 1));
+        assertThat(r.end()).isEqualTo(LocalDate.of(2026, 12, 31));
+    }
+
+    @Test
+    void resolveRange_month_anchoredAcrossYearBoundary() {
+        // Today Jan 1 2027; user picks "last month" → anchor = Dec 5 2026.
+        ReportExportService.Range r = service.resolveRange(
+                ReportPeriod.MONTH, null, null, LocalDate.of(2026, 12, 5));
+        assertThat(r.start()).isEqualTo(LocalDate.of(2026, 12, 1));
+        assertThat(r.end()).isEqualTo(LocalDate.of(2026, 12, 31));
+    }
+
+    @Test
+    void resolveRange_year_usesAnchorYear() {
+        ReportExportService.Range r = service.resolveRange(
+                ReportPeriod.YEAR, null, null, LocalDate.of(2025, 7, 4));
+        assertThat(r.start()).isEqualTo(LocalDate.of(2025, 1, 1));
+        assertThat(r.end()).isEqualTo(LocalDate.of(2025, 12, 31));
+    }
+
+    @Test
+    void resolveRange_week_anchoredAcrossYearBoundary() {
+        // Today Jan 1 2027 (a Friday); user picks "last week" → anchor = Dec 25 2026.
+        // Result: Mon Dec 21 – Sun Dec 27, 2026.
+        ReportExportService.Range r = service.resolveRange(
+                ReportPeriod.WEEK, null, null, LocalDate.of(2026, 12, 25));
+        assertThat(r.start()).isEqualTo(LocalDate.of(2026, 12, 21));
+        assertThat(r.end()).isEqualTo(LocalDate.of(2026, 12, 27));
     }
 
     @Test
