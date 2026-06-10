@@ -31,7 +31,8 @@ public record ReportExportData(
     public record WeeklyBucket(
             String label,
             int daysInOffice,
-            int barHeightPercent
+            int barHeightPercent,
+            boolean showLabel
     ) {}
 
     @Builder

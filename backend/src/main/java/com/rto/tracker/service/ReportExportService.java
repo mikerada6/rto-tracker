@@ -157,16 +157,27 @@ public class ReportExportService {
             weekly.merge(weekStart, 1, Integer::sum);
         }
         int max = weekly.values().stream().max(Comparator.naturalOrder()).orElse(0);
+        int stride = labelStride(weekly.size());
         List<ReportExportData.WeeklyBucket> buckets = new ArrayList<>();
+        int index = 0;
         for (Map.Entry<LocalDate, Integer> e : weekly.entrySet()) {
             int height = max == 0 ? 0 : Math.round((e.getValue() * 100f) / max);
             buckets.add(ReportExportData.WeeklyBucket.builder()
                     .label(weekLabel(e.getKey()))
                     .daysInOffice(e.getValue())
                     .barHeightPercent(height)
+                    .showLabel(index % stride == 0)
                     .build());
+            index++;
         }
         return buckets;
+    }
+
+    static int labelStride(int bucketCount) {
+        if (bucketCount <= 14) return 1;
+        if (bucketCount <= 28) return 2;
+        if (bucketCount <= 56) return 4;
+        return 8;
     }
 
     ReportExportData.Summary buildSummary(Range range, int daysInOffice, double requiredDaysPerWeek) {

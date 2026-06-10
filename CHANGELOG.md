@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chart of office days, and a dated log of each qualifying day with the
   first work-area entry time and location. Suitable for management review.
 
+### Changed
+- Reports PDF: weekly chart now thins date labels for longer periods so the
+  x-axis stays readable on quarter/year reports (every other week beyond 14
+  buckets, every fourth beyond 28, every eighth beyond 56). Dropped the
+  "wk of" prefix to give each label more horizontal room.
+
 ## [1.1.0] - 2026-06-10
 
 UX polish release. Smoothes out friction points in three frequently-used
