@@ -183,8 +183,7 @@ public class ReportExportService {
         return 8;
     }
 
-    ReportExportData.Summary buildSummary(Range range, int daysInOffice,
-                                           double requiredDaysPerWeek, LocalDate today) {
+    ReportExportData.Summary buildSummary(Range range, int daysInOffice, double requiredDaysPerWeek) {
         long totalDays = ChronoUnit.DAYS.between(range.start(), range.end()) + 1;
         double totalWeeks = totalDays / 7.0;
         int requiredDays = (int) Math.ceil(requiredDaysPerWeek * totalWeeks);

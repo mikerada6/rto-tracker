@@ -19,15 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   x-axis stays readable on quarter/year reports (every other week beyond 14
   buckets, every fourth beyond 28, every eighth beyond 56). Dropped the
   "wk of" prefix to give each label more horizontal room.
-- Reports PDF: past-period navigation. The export panel now has prev/next
-  arrows so you can step back through prior weeks, months, quarters, or
-  years (handles year boundaries — clicking back from Jan goes to last
-  year's December correctly). Forward is disabled at the current period.
-- Reports PDF: in-progress period fairness. When the requested period's
-  end is in the future, the badge switches from "Met / Below target" to
-  "On pace / Behind pace" so mid-quarter reports aren't flagged just
-  because the period hasn't finished. The cover shows the cutoff date and
-  a pacing note explains how many days are still needed and at what rate.
 
 ## [1.1.0] - 2026-06-10
 
