@@ -360,7 +360,7 @@
         <tr>
             <td th:each="b : ${data.weeklyBuckets}">
                 <span class="count" th:text="${b.daysInOffice}">3</span>
-                <span th:text="'wk of ' + ${b.label}">wk of Jan 1</span>
+                <span th:if="${b.showLabel}" th:text="${b.label}">Jan 1</span>
             </td>
         </tr>
     </table>

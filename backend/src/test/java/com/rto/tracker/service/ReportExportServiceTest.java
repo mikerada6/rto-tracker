@@ -157,6 +157,42 @@ class ReportExportServiceTest {
     }
 
     @Test
+    void weeklyBuckets_shortRange_labelsEveryBucket() {
+        ReportExportService.Range r = new ReportExportService.Range(
+                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 28));
+        var buckets = service.buildWeeklyBuckets(r, Set.of());
+        assertThat(buckets).hasSize(4);
+        assertThat(buckets).allMatch(ReportExportData.WeeklyBucket::showLabel);
+    }
+
+    @Test
+    void weeklyBuckets_yearRange_thinsLabelsByFour() {
+        ReportExportService.Range r = new ReportExportService.Range(
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+        var buckets = service.buildWeeklyBuckets(r, Set.of());
+        // 53 buckets covering all ISO weeks the range touches
+        assertThat(buckets.size()).isBetween(52, 54);
+        assertThat(buckets.get(0).showLabel()).isTrue();
+        assertThat(buckets.get(1).showLabel()).isFalse();
+        assertThat(buckets.get(4).showLabel()).isTrue();
+        assertThat(buckets.get(8).showLabel()).isTrue();
+        // Only every 4th bucket carries a label
+        long labelled = buckets.stream().filter(ReportExportData.WeeklyBucket::showLabel).count();
+        assertThat(labelled).isBetween(13L, 14L);
+    }
+
+    @Test
+    void labelStride_thresholds() {
+        assertThat(com.rto.tracker.service.ReportExportService.labelStride(1)).isEqualTo(1);
+        assertThat(com.rto.tracker.service.ReportExportService.labelStride(14)).isEqualTo(1);
+        assertThat(com.rto.tracker.service.ReportExportService.labelStride(15)).isEqualTo(2);
+        assertThat(com.rto.tracker.service.ReportExportService.labelStride(28)).isEqualTo(2);
+        assertThat(com.rto.tracker.service.ReportExportService.labelStride(29)).isEqualTo(4);
+        assertThat(com.rto.tracker.service.ReportExportService.labelStride(56)).isEqualTo(4);
+        assertThat(com.rto.tracker.service.ReportExportService.labelStride(57)).isEqualTo(8);
+    }
+
+    @Test
     void weeklyBuckets_emptyQualifying_allZeroNoCrash() {
         ReportExportService.Range r = new ReportExportService.Range(
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7));
