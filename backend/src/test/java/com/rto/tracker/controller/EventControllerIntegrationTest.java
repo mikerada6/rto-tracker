@@ -168,6 +168,130 @@ class EventControllerIntegrationTest {
     }
 
     @Test
+    void recordEvent_oppositeTypeWithinDebounceWindow_dropsBounce() throws Exception {
+        Instant exitAt = Instant.now().minus(1, ChronoUnit.HOURS);
+
+        mockMvc.perform(post("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(CreateEventRequest.builder()
+                                .externalId("zone.city_office")
+                                .eventType(EventType.EXIT)
+                                .timestamp(exitAt)
+                                .build())))
+                .andExpect(status().isCreated());
+
+        // 6-second bounce: should be dropped, returning the existing Exit
+        mockMvc.perform(post("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(CreateEventRequest.builder()
+                                .externalId("zone.city_office")
+                                .eventType(EventType.ENTER)
+                                .timestamp(exitAt.plusSeconds(6))
+                                .build())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.eventType").value("EXIT"));
+
+        // Only the original Exit should be present
+        mockMvc.perform(get("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .param("startDate", java.time.LocalDate.now().minusDays(1).toString())
+                        .param("endDate", java.time.LocalDate.now().plusDays(1).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].eventType").value("EXIT"));
+    }
+
+    @Test
+    void recordEvent_oppositeTypeBeyondDebounceWindow_persists() throws Exception {
+        Instant exitAt = Instant.now().minus(1, ChronoUnit.HOURS);
+
+        mockMvc.perform(post("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(CreateEventRequest.builder()
+                                .externalId("zone.city_office")
+                                .eventType(EventType.EXIT)
+                                .timestamp(exitAt)
+                                .build())))
+                .andExpect(status().isCreated());
+
+        // 60-second gap: well outside 30s debounce → keep
+        mockMvc.perform(post("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(CreateEventRequest.builder()
+                                .externalId("zone.city_office")
+                                .eventType(EventType.ENTER)
+                                .timestamp(exitAt.plusSeconds(60))
+                                .build())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.eventType").value("ENTER"));
+
+        mockMvc.perform(get("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .param("startDate", java.time.LocalDate.now().minusDays(1).toString())
+                        .param("endDate", java.time.LocalDate.now().plusDays(1).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)));
+    }
+
+    @Test
+    void deleteEvent_softDeletesAndExcludesFromList() throws Exception {
+        Instant ts = Instant.now().minus(1, ChronoUnit.HOURS);
+        String body = mockMvc.perform(post("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(CreateEventRequest.builder()
+                                .externalId("zone.city_office")
+                                .eventType(EventType.ENTER)
+                                .timestamp(ts)
+                                .build())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String eventId = objectMapper.readTree(body).get("id").asText();
+
+        mockMvc.perform(delete("/api/v1/events/" + eventId)
+                        .header("X-API-Key", apiKey))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .param("startDate", java.time.LocalDate.now().minusDays(1).toString())
+                        .param("endDate", java.time.LocalDate.now().plusDays(1).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void deleteEvent_otherUsersEvent_returns404() throws Exception {
+        Instant ts = Instant.now().minus(1, ChronoUnit.HOURS);
+        String body = mockMvc.perform(post("/api/v1/events")
+                        .header("X-API-Key", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(CreateEventRequest.builder()
+                                .externalId("zone.city_office")
+                                .eventType(EventType.ENTER)
+                                .timestamp(ts)
+                                .build())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String eventId = objectMapper.readTree(body).get("id").asText();
+
+        String otherKey = UserService.generateApiKey();
+        userRepository.save(User.builder()
+                .email("intruder@test.com")
+                .displayName("Intruder")
+                .apiKeyHash(UserService.hashApiKey(otherKey))
+                .build());
+
+        mockMvc.perform(delete("/api/v1/events/" + eventId)
+                        .header("X-API-Key", otherKey))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void listEvents_onlyReturnsAuthenticatedUserEvents() throws Exception {
         // Create event for testUser
         Instant timestamp = Instant.now().minus(1, ChronoUnit.HOURS);

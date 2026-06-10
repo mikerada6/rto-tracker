@@ -82,6 +82,9 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
                   <th class="text-left px-4 py-3 text-gray-500 font-medium">Timestamp</th>
                   <th class="text-left px-4 py-3 text-gray-500 font-medium">Zone</th>
                   <th class="text-left px-4 py-3 text-gray-500 font-medium">Type</th>
+                  <th class="text-right px-4 py-3 text-gray-500 font-medium w-12">
+                    <span class="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -97,10 +100,23 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
                         {{ event.eventType }}
                       </span>
                     </td>
+                    <td class="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        (click)="confirmDelete(event)"
+                        [attr.aria-label]="'Delete event ' + event.eventType + ' at ' + event.zoneName"
+                        class="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                        </svg>
+                      </button>
+                    </td>
                   </tr>
                 } @empty {
                   <tr>
-                    <td colspan="3" class="px-4 py-12 text-center text-gray-400">
+                    <td colspan="4" class="px-4 py-12 text-center text-gray-400">
                       <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
@@ -115,9 +131,9 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
           <!-- Card layout for mobile (< sm) -->
           <div class="sm:hidden divide-y divide-gray-100">
             @for (event of pagedEvents(); track event.id) {
-              <div class="px-4 py-3 flex items-center justify-between">
-                <div>
-                  <p class="text-sm font-medium text-gray-900">{{ event.zoneName }}</p>
+              <div class="px-4 py-3 flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium text-gray-900 truncate">{{ event.zoneName }}</p>
                   <p class="text-xs text-gray-400 font-mono">{{ event.timestamp | date:'MMM d, yyyy HH:mm' }}</p>
                 </div>
                 <span
@@ -126,6 +142,17 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
                 >
                   {{ event.eventType }}
                 </span>
+                <button
+                  type="button"
+                  (click)="confirmDelete(event)"
+                  [attr.aria-label]="'Delete event ' + event.eventType + ' at ' + event.zoneName"
+                  class="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                  </svg>
+                </button>
               </div>
             } @empty {
               <div class="px-4 py-12 text-center text-gray-400">
@@ -158,6 +185,37 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
               </div>
             </div>
           }
+        </div>
+      }
+
+      <!-- Delete confirmation dialog -->
+      @if (eventToDelete()) {
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-label="Delete event">
+          <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div class="flex items-center gap-3 mb-4">
+              <span class="text-2xl">⚠️</span>
+              <h2 class="text-lg font-semibold text-gray-900">Delete Event?</h2>
+            </div>
+            <p class="text-sm text-gray-600 mb-2">
+              Delete this event? The day's commute and office stats will recompute without it.
+            </p>
+            <div class="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 mb-6 space-y-1">
+              <p><span class="text-gray-500">When:</span> <span class="font-mono">{{ eventToDelete()!.timestamp | date:'MMM d, yyyy HH:mm:ss' }}</span></p>
+              <p><span class="text-gray-500">Zone:</span> {{ eventToDelete()!.zoneName }}</p>
+              <p><span class="text-gray-500">Type:</span>
+                <span
+                  class="ml-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                  [class]="eventToDelete()!.eventType === 'ENTER' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+                >{{ eventToDelete()!.eventType }}</span>
+              </p>
+            </div>
+            <div class="flex justify-end gap-3">
+              <button (click)="eventToDelete.set(null)"
+                class="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+              <button (click)="executeDelete()"
+                class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors">Delete</button>
+            </div>
+          </div>
         </div>
       }
 
@@ -261,6 +319,7 @@ export class EventHistoryComponent implements OnInit {
   readonly uploadResult = signal<any>(null);
   readonly csvZoneNames = signal<string[]>([]);
   readonly currentPage = signal(0);
+  readonly eventToDelete = signal<ZoneEventResponse | null>(null);
 
   pageSize = 25;
   zoneMapping: Record<string, string> = {};
@@ -288,7 +347,27 @@ export class EventHistoryComponent implements OnInit {
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(e: KeyboardEvent): void {
-    if (e.key === 'Escape') this.showUpload.set(false);
+    if (e.key === 'Escape') {
+      this.showUpload.set(false);
+      this.eventToDelete.set(null);
+    }
+  }
+
+  confirmDelete(event: ZoneEventResponse): void {
+    this.eventToDelete.set(event);
+  }
+
+  executeDelete(): void {
+    const event = this.eventToDelete();
+    if (!event) return;
+    this.eventToDelete.set(null);
+    this.eventService.delete(event.id).subscribe({
+      next: () => {
+        this.loadEvents();
+        this.toast.success('Event deleted');
+      },
+      error: () => this.toast.error('Failed to delete event.')
+    });
   }
 
   loadEvents(): void {

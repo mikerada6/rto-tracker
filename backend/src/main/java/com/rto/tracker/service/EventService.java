@@ -33,22 +33,29 @@ public class EventService {
     private final OfficeDayRecordRepository officeDayRecordRepository;
     private final Counter eventsRecordedCounter;
     private final Counter eventsDeduplicatedCounter;
+    private final Counter eventsBounceDebouncedCounter;
     private final int deduplicationWindowMinutes;
+    private final int bounceDebounceSeconds;
 
     public EventService(ZoneEventRepository eventRepository,
                         ZoneRepository zoneRepository,
                         OfficeDayRecordRepository officeDayRecordRepository,
                         MeterRegistry meterRegistry,
-                        @Value("${app.deduplication-window-minutes:5}") int deduplicationWindowMinutes) {
+                        @Value("${app.deduplication-window-minutes:5}") int deduplicationWindowMinutes,
+                        @Value("${app.bounce-debounce-seconds:30}") int bounceDebounceSeconds) {
         this.eventRepository = eventRepository;
         this.zoneRepository = zoneRepository;
         this.officeDayRecordRepository = officeDayRecordRepository;
         this.deduplicationWindowMinutes = deduplicationWindowMinutes;
+        this.bounceDebounceSeconds = bounceDebounceSeconds;
         this.eventsRecordedCounter = Counter.builder("rto.events.recorded")
                 .description("Number of zone events successfully recorded")
                 .register(meterRegistry);
         this.eventsDeduplicatedCounter = Counter.builder("rto.events.deduplicated")
                 .description("Number of zone events deduplicated")
+                .register(meterRegistry);
+        this.eventsBounceDebouncedCounter = Counter.builder("rto.events.bounce_debounced")
+                .description("Number of zone events dropped as opposite-direction GPS bounces")
                 .register(meterRegistry);
     }
 
@@ -75,6 +82,23 @@ public class EventService {
                     userId, zone.getId(), request.getEventType(), request.getTimestamp());
             eventsDeduplicatedCounter.increment();
             return duplicates.getFirst();
+        }
+
+        // GPS bounce-debounce: drop opposite-direction events for the same user+zone
+        // that arrive within the configured window (covers Exit->Enter and Enter->Exit jitter)
+        Optional<ZoneEvent> latestForZone = eventRepository.findLatestForUserAndZone(
+                userId, zone.getId(), request.getTimestamp());
+        if (latestForZone.isPresent()) {
+            ZoneEvent latest = latestForZone.get();
+            long deltaSeconds = Math.abs(Duration.between(latest.getTimestamp(), request.getTimestamp()).getSeconds());
+            if (latest.getEventType() != request.getEventType() && deltaSeconds <= bounceDebounceSeconds) {
+                log.warn("Bounce-debounced event: userId={}, zoneId={}, incomingType={}, incomingTs={}, " +
+                                "priorType={}, priorTs={}, deltaSeconds={}",
+                        userId, zone.getId(), request.getEventType(), request.getTimestamp(),
+                        latest.getEventType(), latest.getTimestamp(), deltaSeconds);
+                eventsBounceDebouncedCounter.increment();
+                return latest;
+            }
         }
 
         ZoneEvent event = ZoneEvent.builder()
@@ -253,16 +277,47 @@ public class EventService {
             existingKeys.add(e.getZone().getId() + "|" + e.getEventType() + "|" + e.getTimestamp());
         }
 
-        List<ZoneEvent> newEvents = new ArrayList<>();
+        List<ZoneEvent> dedupedEvents = new ArrayList<>();
         int skippedCount = 0;
         for (ZoneEvent event : eventsToSave) {
             String key = event.getZone().getId() + "|" + event.getEventType() + "|" + event.getTimestamp();
             if (existingKeys.contains(key)) {
                 skippedCount++;
             } else {
-                newEvents.add(event);
+                dedupedEvents.add(event);
             }
         }
+
+        // GPS bounce-debounce: drop opposite-direction events within the configured window.
+        // Walk events per-zone in timestamp order, seeded with the most recent existing DB
+        // event so bounces that straddle the import boundary are caught too.
+        dedupedEvents.sort(Comparator.comparing(ZoneEvent::getTimestamp));
+        Map<UUID, ZoneEvent> latestByZone = new HashMap<>();
+        List<ZoneEvent> newEvents = new ArrayList<>();
+        int bouncedCount = 0;
+        for (ZoneEvent event : dedupedEvents) {
+            UUID zoneId = event.getZone().getId();
+            ZoneEvent prior = latestByZone.get(zoneId);
+            if (prior == null) {
+                prior = eventRepository.findLatestForUserAndZone(userId, zoneId, event.getTimestamp())
+                        .orElse(null);
+            }
+            if (prior != null
+                    && prior.getEventType() != event.getEventType()
+                    && Math.abs(Duration.between(prior.getTimestamp(), event.getTimestamp()).getSeconds())
+                            <= bounceDebounceSeconds) {
+                log.warn("Bulk import bounce-debounced: userId={}, zoneId={}, incomingType={}, incomingTs={}, " +
+                                "priorType={}, priorTs={}",
+                        userId, zoneId, event.getEventType(), event.getTimestamp(),
+                        prior.getEventType(), prior.getTimestamp());
+                bouncedCount++;
+                eventsBounceDebouncedCounter.increment();
+                continue;
+            }
+            newEvents.add(event);
+            latestByZone.put(zoneId, event);
+        }
+        skippedCount += bouncedCount;
 
         if (!newEvents.isEmpty()) {
             eventRepository.saveAll(newEvents);
@@ -284,6 +339,24 @@ public class EventService {
                 .skippedCount(skippedCount)
                 .errors(List.of())
                 .build();
+    }
+
+    @Transactional
+    public void deleteEvent(UUID userId, User user, UUID eventId) {
+        ZoneEvent event = eventRepository.findById(eventId)
+                .filter(e -> e.getUser().getId().equals(userId))
+                .filter(e -> e.getDeletedAt() == null)
+                .orElseThrow(() -> new EntityNotFoundException("Event not found: " + eventId));
+
+        event.setDeletedAt(Instant.now());
+        eventRepository.save(event);
+
+        ZoneId userZone = ZoneId.of(user.getTimezone());
+        LocalDate eventDate = event.getTimestamp().atZone(userZone).toLocalDate();
+        officeDayRecordRepository.deleteByUserIdAndDate(userId, eventDate);
+
+        log.info("Event soft-deleted: id={}, userId={}, originalDate={}, originalType={}, originalTs={}",
+                eventId, userId, eventDate, event.getEventType(), event.getTimestamp());
     }
 
     private Zone resolveZone(UUID userId, CreateEventRequest request) {

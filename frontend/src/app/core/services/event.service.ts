@@ -22,4 +22,8 @@ export class EventService {
     formData.append('zoneMapping', JSON.stringify(zoneMapping));
     return this.http.post<BulkUploadResponse>('/api/v1/events/upload', formData);
   }
+
+  delete(eventId: string): Observable<void> {
+    return this.http.delete<void>(`/api/v1/events/${eventId}`);
+  }
 }

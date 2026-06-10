@@ -78,6 +78,21 @@ public class EventController {
         return ResponseEntity.ok(response);
     }
 
+    @DeleteMapping("/{eventId}")
+    @Operation(summary = "Delete a zone event",
+            description = "Soft-deletes a zone event the user owns. Useful for cleaning up GPS-bounce events " +
+                    "or other bad data that slipped past the ingestion-time debounce.")
+    @ApiResponse(responseCode = "204", description = "Event deleted")
+    @ApiResponse(responseCode = "401", description = "Missing or invalid API key")
+    @ApiResponse(responseCode = "404", description = "Event not found or not owned by this user",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public ResponseEntity<Void> deleteEvent(@AuthenticationPrincipal User user,
+                                            @PathVariable UUID eventId) {
+        log.info("Deleting event: userId={}, eventId={}", user.getId(), eventId);
+        eventService.deleteEvent(user.getId(), user, eventId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Bulk import zone events from CSV",
             description = "Uploads a CSV file of historical zone events. The CSV must have columns: " +

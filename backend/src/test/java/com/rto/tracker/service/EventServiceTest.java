@@ -42,7 +42,7 @@ class EventServiceTest {
 
     @BeforeEach
     void setUp() {
-        eventService = new EventService(eventRepository, zoneRepository, officeDayRecordRepository, new SimpleMeterRegistry(), 5);
+        eventService = new EventService(eventRepository, zoneRepository, officeDayRecordRepository, new SimpleMeterRegistry(), 5, 30);
 
         testUser = User.builder()
                 .id(UUID.randomUUID())
@@ -72,6 +72,8 @@ class EventServiceTest {
                 .thenReturn(Optional.of(testZone));
         when(eventRepository.findDuplicates(any(), any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
+        when(eventRepository.findLatestForUserAndZone(any(UUID.class), any(UUID.class), any(Instant.class)))
+                .thenReturn(Optional.empty());
 
         ZoneEvent savedEvent = ZoneEvent.builder()
                 .id(UUID.randomUUID())
@@ -87,6 +89,162 @@ class EventServiceTest {
         assertThat(result.getId()).isNotNull();
         assertThat(result.getZone()).isEqualTo(testZone);
         verify(eventRepository).save(any(ZoneEvent.class));
+    }
+
+    @Test
+    void recordEvent_oppositeTypeWithinDebounceWindow_dropsAsBounce() {
+        Instant ts = Instant.now().minus(1, ChronoUnit.HOURS);
+        CreateEventRequest request = CreateEventRequest.builder()
+                .externalId("zone.city_office")
+                .eventType(EventType.ENTER)
+                .timestamp(ts)
+                .build();
+
+        ZoneEvent priorExit = ZoneEvent.builder()
+                .id(UUID.randomUUID())
+                .user(testUser)
+                .zone(testZone)
+                .eventType(EventType.EXIT)
+                .timestamp(ts.minusSeconds(6))
+                .build();
+
+        when(zoneRepository.findByUserIdAndExternalId(testUser.getId(), "zone.city_office"))
+                .thenReturn(Optional.of(testZone));
+        when(eventRepository.findDuplicates(any(), any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(eventRepository.findLatestForUserAndZone(eq(testUser.getId()), eq(testZone.getId()), any(Instant.class)))
+                .thenReturn(Optional.of(priorExit));
+
+        ZoneEvent result = eventService.recordEvent(testUser.getId(), testUser, request);
+
+        assertThat(result.getId()).isEqualTo(priorExit.getId());
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void recordEvent_oppositeTypeBeyondDebounceWindow_persistsNormally() {
+        Instant ts = Instant.now().minus(1, ChronoUnit.HOURS);
+        CreateEventRequest request = CreateEventRequest.builder()
+                .externalId("zone.city_office")
+                .eventType(EventType.ENTER)
+                .timestamp(ts)
+                .build();
+
+        ZoneEvent priorExit = ZoneEvent.builder()
+                .id(UUID.randomUUID())
+                .user(testUser)
+                .zone(testZone)
+                .eventType(EventType.EXIT)
+                .timestamp(ts.minusSeconds(120))
+                .build();
+
+        when(zoneRepository.findByUserIdAndExternalId(testUser.getId(), "zone.city_office"))
+                .thenReturn(Optional.of(testZone));
+        when(eventRepository.findDuplicates(any(), any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(eventRepository.findLatestForUserAndZone(eq(testUser.getId()), eq(testZone.getId()), any(Instant.class)))
+                .thenReturn(Optional.of(priorExit));
+        when(eventRepository.save(any(ZoneEvent.class))).thenAnswer(inv -> {
+            ZoneEvent e = inv.getArgument(0);
+            e.setId(UUID.randomUUID());
+            return e;
+        });
+
+        ZoneEvent result = eventService.recordEvent(testUser.getId(), testUser, request);
+
+        assertThat(result.getEventType()).isEqualTo(EventType.ENTER);
+        verify(eventRepository).save(any(ZoneEvent.class));
+    }
+
+    @Test
+    void recordEvent_enterAfterEnterStillSameTypeDeduped() {
+        Instant ts = Instant.now().minus(1, ChronoUnit.HOURS);
+        CreateEventRequest request = CreateEventRequest.builder()
+                .externalId("zone.city_office")
+                .eventType(EventType.ENTER)
+                .timestamp(ts)
+                .build();
+
+        ZoneEvent existing = ZoneEvent.builder()
+                .id(UUID.randomUUID())
+                .user(testUser)
+                .zone(testZone)
+                .eventType(EventType.ENTER)
+                .timestamp(ts.minusSeconds(60))
+                .build();
+
+        when(zoneRepository.findByUserIdAndExternalId(testUser.getId(), "zone.city_office"))
+                .thenReturn(Optional.of(testZone));
+        when(eventRepository.findDuplicates(any(), any(), any(), any(), any()))
+                .thenReturn(List.of(existing));
+
+        ZoneEvent result = eventService.recordEvent(testUser.getId(), testUser, request);
+
+        assertThat(result.getId()).isEqualTo(existing.getId());
+        verify(eventRepository, never()).findLatestForUserAndZone(any(UUID.class), any(UUID.class), any(Instant.class));
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteEvent_marksDeletedAndInvalidatesCache() {
+        UUID eventId = UUID.randomUUID();
+        Instant ts = Instant.now().minus(1, ChronoUnit.HOURS);
+        ZoneEvent event = ZoneEvent.builder()
+                .id(eventId)
+                .user(testUser)
+                .zone(testZone)
+                .eventType(EventType.ENTER)
+                .timestamp(ts)
+                .build();
+        testUser.setTimezone("America/New_York");
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+        eventService.deleteEvent(testUser.getId(), testUser, eventId);
+
+        assertThat(event.getDeletedAt()).isNotNull();
+        verify(eventRepository).save(event);
+        verify(officeDayRecordRepository).deleteByUserIdAndDate(eq(testUser.getId()), any());
+    }
+
+    @Test
+    void deleteEvent_otherUsersEvent_throwsNotFound() {
+        UUID eventId = UUID.randomUUID();
+        User otherUser = User.builder().id(UUID.randomUUID()).email("o@x").displayName("o").apiKeyHash("h").build();
+        ZoneEvent event = ZoneEvent.builder()
+                .id(eventId)
+                .user(otherUser)
+                .zone(testZone)
+                .eventType(EventType.ENTER)
+                .timestamp(Instant.now())
+                .build();
+        testUser.setTimezone("America/New_York");
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+        assertThatThrownBy(() -> eventService.deleteEvent(testUser.getId(), testUser, eventId))
+                .isInstanceOf(EntityNotFoundException.class);
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteEvent_alreadyDeleted_throwsNotFound() {
+        UUID eventId = UUID.randomUUID();
+        ZoneEvent event = ZoneEvent.builder()
+                .id(eventId)
+                .user(testUser)
+                .zone(testZone)
+                .eventType(EventType.ENTER)
+                .timestamp(Instant.now())
+                .deletedAt(Instant.now().minusSeconds(60))
+                .build();
+        testUser.setTimezone("America/New_York");
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(event));
+
+        assertThatThrownBy(() -> eventService.deleteEvent(testUser.getId(), testUser, eventId))
+                .isInstanceOf(EntityNotFoundException.class);
+        verify(eventRepository, never()).save(any());
     }
 
     @Test

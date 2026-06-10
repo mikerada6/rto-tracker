@@ -42,4 +42,7 @@ public class ZoneEvent {
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 }
