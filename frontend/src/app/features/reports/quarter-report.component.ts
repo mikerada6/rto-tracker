@@ -7,17 +7,20 @@ import { ReportService, AvailablePeriod } from '../../core/services/report.servi
 import { QuarterReportResponse } from '../../core/models/report.model';
 import { SkeletonComponent } from '../../shared/components/skeleton.component';
 import { ThemeService } from '../../core/services/theme.service';
+import { ReportExportPanelComponent } from './components/report-export-panel.component';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend, annotationPlugin);
 
 @Component({
   selector: 'app-quarter-report',
-  imports: [DecimalPipe, SkeletonComponent],
+  imports: [DecimalPipe, SkeletonComponent, ReportExportPanelComponent],
   template: `
     <div class="space-y-6">
       <div class="flex items-center justify-between">
-        <h1 class="text-xl font-semibold text-gray-900">Quarterly Report</h1>
+        <h1 class="text-xl font-semibold text-gray-900">Reports</h1>
       </div>
+
+      <app-report-export-panel />
 
       <!-- Quarter selector -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>RTO Compliance Report</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 0.6in 0.6in 0.9in 0.6in;
+            @bottom-left {
+                content: "Confidential — for management review";
+                font-family: "Helvetica", "Arial", sans-serif;
+                font-size: 8pt;
+                color: #6b7280;
+            }
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: "Helvetica", "Arial", sans-serif;
+                font-size: 8pt;
+                color: #6b7280;
+            }
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: "Helvetica", "Arial", sans-serif;
+            font-size: 10pt;
+            color: #111827;
+            line-height: 1.45;
+            margin: 0;
+            padding: 0;
+        }
+
+        .cover {
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 14pt;
+            margin-bottom: 22pt;
+        }
+
+        .cover .eyebrow {
+            font-size: 8.5pt;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #2563eb;
+            font-weight: 700;
+            margin-bottom: 6pt;
+        }
+
+        .cover h1 {
+            font-size: 22pt;
+            margin: 0 0 4pt 0;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .cover .subtitle {
+            font-size: 11pt;
+            color: #475569;
+            margin: 0;
+        }
+
+        .cover-meta {
+            margin-top: 14pt;
+            width: 100%;
+        }
+
+        .cover-meta td {
+            font-size: 9pt;
+            color: #475569;
+            padding-right: 24pt;
+            vertical-align: top;
+        }
+
+        .cover-meta .label {
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-size: 7.5pt;
+            color: #94a3b8;
+            font-weight: 700;
+            padding-bottom: 2pt;
+            display: block;
+        }
+
+        .cover-meta .value {
+            color: #0f172a;
+            font-weight: 600;
+            font-size: 10pt;
+        }
+
+        h2.section {
+            font-size: 11pt;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #475569;
+            margin: 22pt 0 10pt 0;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 4pt;
+        }
+
+        .summary {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 8pt 0;
+            margin-bottom: 6pt;
+        }
+
+        .summary .stat {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6pt;
+            padding: 12pt 14pt;
+            width: 25%;
+            vertical-align: top;
+        }
+
+        .summary .stat .stat-label {
+            font-size: 7.5pt;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            font-weight: 600;
+            margin-bottom: 4pt;
+        }
+
+        .summary .stat .stat-value {
+            font-size: 20pt;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.1;
+        }
+
+        .summary .stat .stat-suffix {
+            font-size: 9pt;
+            color: #64748b;
+            font-weight: 500;
+            margin-left: 2pt;
+        }
+
+        .compliance-badge {
+            display: inline-block;
+            padding: 4pt 10pt;
+            border-radius: 999pt;
+            font-size: 9pt;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
+        .compliance-badge.compliant {
+            background-color: #dcfce7;
+            color: #15803d;
+        }
+
+        .compliance-badge.non-compliant {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .chart {
+            border: 1px solid #e5e7eb;
+            border-radius: 6pt;
+            padding: 12pt 14pt 8pt 14pt;
+            background-color: #fafafa;
+        }
+
+        .chart-bars {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .chart-bars td {
+            vertical-align: bottom;
+            text-align: center;
+            padding: 0 2pt;
+            height: 110pt;
+        }
+
+        .bar {
+            display: block;
+            margin: 0 auto;
+            width: 70%;
+            min-width: 14pt;
+            background-color: #2563eb;
+            border-radius: 3pt 3pt 0 0;
+        }
+
+        .bar.zero {
+            background-color: #e2e8f0;
+            height: 2pt;
+        }
+
+        .chart-labels td {
+            text-align: center;
+            font-size: 7.5pt;
+            color: #64748b;
+            padding-top: 4pt;
+        }
+
+        .chart-labels .count {
+            display: block;
+            color: #0f172a;
+            font-weight: 600;
+            font-size: 8pt;
+        }
+
+        table.log {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6pt;
+        }
+
+        table.log th {
+            text-align: left;
+            font-size: 8.5pt;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748b;
+            border-bottom: 1.5pt solid #cbd5e1;
+            padding: 6pt 8pt;
+            font-weight: 700;
+        }
+
+        table.log td {
+            padding: 7pt 8pt;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 9.5pt;
+            color: #1f2937;
+        }
+
+        table.log tr.alt td {
+            background-color: #f8fafc;
+        }
+
+        .day-cell {
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .dow-cell {
+            color: #64748b;
+        }
+
+        .time-cell {
+            color: #0f172a;
+        }
+
+        .empty {
+            border: 1px dashed #cbd5e1;
+            border-radius: 6pt;
+            padding: 24pt;
+            text-align: center;
+            color: #64748b;
+            font-size: 10pt;
+        }
+
+        .signature {
+            margin-top: 26pt;
+            page-break-inside: avoid;
+        }
+
+        .signature table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .signature td {
+            width: 50%;
+            padding-right: 16pt;
+            vertical-align: bottom;
+        }
+
+        .signature .line {
+            border-top: 1px solid #94a3b8;
+            padding-top: 4pt;
+            font-size: 8pt;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .signature .gap {
+            height: 30pt;
+        }
+    </style>
+</head>
+<body>
+
+<div class="cover">
+    <div class="eyebrow">RTO Compliance Report</div>
+    <h1 th:text="${data.displayName}">Employee Name</h1>
+    <p class="subtitle" th:text="${data.periodLabel}">Reporting Period</p>
+
+    <table class="cover-meta">
+        <tr>
+            <td>
+                <span class="label">Period</span>
+                <span class="value">
+                    <span th:text="${#temporals.format(data.periodStart, 'MMM d, yyyy')}">Jan 1, 2026</span>
+                    —
+                    <span th:text="${#temporals.format(data.periodEnd, 'MMM d, yyyy')}">Jan 7, 2026</span>
+                </span>
+            </td>
+            <td>
+                <span class="label">Generated</span>
+                <span class="value" th:text="${data.generatedAt}">Jun 10, 2026 at 3:00 PM EDT</span>
+            </td>
+            <td>
+                <span class="label">Status</span>
+                <span th:if="${summary.compliant}" class="compliance-badge compliant">Meeting target</span>
+                <span th:unless="${summary.compliant}" class="compliance-badge non-compliant">Below target</span>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<h2 class="section">Compliance Summary</h2>
+<table class="summary">
+    <tr>
+        <td class="stat">
+            <div class="stat-label">Days in Office</div>
+            <div class="stat-value" th:text="${summary.daysInOffice}">12</div>
+        </td>
+        <td class="stat">
+            <div class="stat-label">Target Days</div>
+            <div class="stat-value">
+                <span th:text="${summary.requiredDays}">13</span>
+            </div>
+        </td>
+        <td class="stat">
+            <div class="stat-label">Required per Week</div>
+            <div class="stat-value">
+                <span th:text="${#numbers.formatDecimal(summary.requiredDaysPerWeek, 1, 1)}">3.0</span>
+                <span class="stat-suffix">days</span>
+            </div>
+        </td>
+        <td class="stat">
+            <div class="stat-label">Actual per Week</div>
+            <div class="stat-value">
+                <span th:text="${#numbers.formatDecimal(summary.averagePerWeek, 1, 2)}">2.85</span>
+                <span class="stat-suffix">days</span>
+            </div>
+        </td>
+    </tr>
+</table>
+
+<h2 class="section">Weekly Breakdown</h2>
+<div class="chart" th:if="${!data.weeklyBuckets.isEmpty()}">
+    <table class="chart-bars">
+        <tr>
+            <td th:each="b : ${data.weeklyBuckets}">
+                <span th:if="${b.daysInOffice > 0}"
+                      class="bar"
+                      th:style="'height: ' + ${b.barHeightPercent} + 'pt;'"></span>
+                <span th:unless="${b.daysInOffice > 0}" class="bar zero"></span>
+            </td>
+        </tr>
+    </table>
+    <table class="chart-bars chart-labels">
+        <tr>
+            <td th:each="b : ${data.weeklyBuckets}">
+                <span class="count" th:text="${b.daysInOffice}">3</span>
+                <span th:text="'wk of ' + ${b.label}">wk of Jan 1</span>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<h2 class="section">Office Day Log</h2>
+<div th:if="${data.rows.isEmpty()}" class="empty">
+    No qualifying office days recorded in this period.
+</div>
+<table class="log" th:unless="${data.rows.isEmpty()}">
+    <thead>
+        <tr>
+            <th style="width: 22%;">Date</th>
+            <th style="width: 22%;">Day</th>
+            <th style="width: 22%;">First Entry</th>
+            <th style="width: 34%;">Work Location</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr th:each="row, iter : ${data.rows}" th:classappend="${iter.odd} ? '' : 'alt'">
+            <td class="day-cell" th:text="${#temporals.format(row.date, 'MMM d, yyyy')}">Jan 1, 2026</td>
+            <td class="dow-cell" th:text="${row.dayOfWeek}">Wednesday</td>
+            <td class="time-cell" th:text="${row.firstEntryTime}">8:42 AM</td>
+            <td th:text="${row.zoneName}">HQ Office</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="signature">
+    <table>
+        <tr>
+            <td>
+                <div class="gap"></div>
+                <div class="line">Employee signature &amp; date</div>
+            </td>
+            <td>
+                <div class="gap"></div>
+                <div class="line">Manager signature &amp; date</div>
+            </td>
+        </tr>
+    </table>
+</div>
+
+</body>
+</html>
