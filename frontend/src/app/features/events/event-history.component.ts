@@ -79,9 +79,39 @@ import { SkeletonComponent } from '../../shared/components/skeleton.component';
             <table class="w-full text-sm">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="text-left px-4 py-3 text-gray-500 font-medium">Timestamp</th>
-                  <th class="text-left px-4 py-3 text-gray-500 font-medium">Zone</th>
-                  <th class="text-left px-4 py-3 text-gray-500 font-medium">Type</th>
+                  <th class="text-left px-4 py-3 text-gray-500 font-medium">
+                    <button
+                      type="button"
+                      (click)="toggleSort('timestamp')"
+                      [attr.aria-sort]="ariaSort('timestamp')"
+                      class="inline-flex items-center gap-1 hover:text-gray-900 transition-colors"
+                    >
+                      Timestamp
+                      <span class="text-xs w-3 inline-block" aria-hidden="true">{{ sortIndicator('timestamp') }}</span>
+                    </button>
+                  </th>
+                  <th class="text-left px-4 py-3 text-gray-500 font-medium">
+                    <button
+                      type="button"
+                      (click)="toggleSort('zone')"
+                      [attr.aria-sort]="ariaSort('zone')"
+                      class="inline-flex items-center gap-1 hover:text-gray-900 transition-colors"
+                    >
+                      Zone
+                      <span class="text-xs w-3 inline-block" aria-hidden="true">{{ sortIndicator('zone') }}</span>
+                    </button>
+                  </th>
+                  <th class="text-left px-4 py-3 text-gray-500 font-medium">
+                    <button
+                      type="button"
+                      (click)="toggleSort('type')"
+                      [attr.aria-sort]="ariaSort('type')"
+                      class="inline-flex items-center gap-1 hover:text-gray-900 transition-colors"
+                    >
+                      Type
+                      <span class="text-xs w-3 inline-block" aria-hidden="true">{{ sortIndicator('type') }}</span>
+                    </button>
+                  </th>
                   <th class="text-right px-4 py-3 text-gray-500 font-medium w-12">
                     <span class="sr-only">Actions</span>
                   </th>
@@ -320,6 +350,8 @@ export class EventHistoryComponent implements OnInit {
   readonly csvZoneNames = signal<string[]>([]);
   readonly currentPage = signal(0);
   readonly eventToDelete = signal<ZoneEventResponse | null>(null);
+  readonly sortColumn = signal<'timestamp' | 'zone' | 'type' | null>(null);
+  readonly sortDirection = signal<'asc' | 'desc'>('asc');
 
   pageSize = 25;
   zoneMapping: Record<string, string> = {};
@@ -329,10 +361,37 @@ export class EventHistoryComponent implements OnInit {
   selectedZoneId = '';
   selectedType = '';
 
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.events().length / this.pageSize)));
+  readonly sortedEvents = computed(() => {
+    const col = this.sortColumn();
+    if (!col) return this.events();
+    const dir = this.sortDirection() === 'asc' ? 1 : -1;
+    return [...this.events()].sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      switch (col) {
+        case 'timestamp':
+          av = new Date(a.timestamp).getTime();
+          bv = new Date(b.timestamp).getTime();
+          break;
+        case 'zone':
+          av = (a.zoneName ?? '').toLowerCase();
+          bv = (b.zoneName ?? '').toLowerCase();
+          break;
+        case 'type':
+          av = a.eventType;
+          bv = b.eventType;
+          break;
+      }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  });
+
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.sortedEvents().length / this.pageSize)));
   readonly pageStart = computed(() => this.currentPage() * this.pageSize);
-  readonly pageEnd = computed(() => Math.min(this.pageStart() + this.pageSize, this.events().length));
-  readonly pagedEvents = computed(() => this.events().slice(this.pageStart(), this.pageEnd()));
+  readonly pageEnd = computed(() => Math.min(this.pageStart() + this.pageSize, this.sortedEvents().length));
+  readonly pagedEvents = computed(() => this.sortedEvents().slice(this.pageStart(), this.pageEnd()));
 
   constructor(
     private eventService: EventService,
@@ -397,6 +456,29 @@ export class EventHistoryComponent implements OnInit {
 
   onPageSizeChange(): void {
     this.currentPage.set(0);
+  }
+
+  toggleSort(column: 'timestamp' | 'zone' | 'type'): void {
+    if (this.sortColumn() !== column) {
+      this.sortColumn.set(column);
+      this.sortDirection.set('asc');
+    } else if (this.sortDirection() === 'asc') {
+      this.sortDirection.set('desc');
+    } else {
+      this.sortColumn.set(null);
+      this.sortDirection.set('asc');
+    }
+    this.currentPage.set(0);
+  }
+
+  sortIndicator(column: 'timestamp' | 'zone' | 'type'): string {
+    if (this.sortColumn() !== column) return '';
+    return this.sortDirection() === 'asc' ? '▲' : '▼';
+  }
+
+  ariaSort(column: 'timestamp' | 'zone' | 'type'): 'ascending' | 'descending' | 'none' {
+    if (this.sortColumn() !== column) return 'none';
+    return this.sortDirection() === 'asc' ? 'ascending' : 'descending';
   }
 
   openUpload(): void {
