@@ -24,17 +24,29 @@ import { getComplianceStatus, getStatusLabel, ComplianceStatus } from '../../../
               this quarter
             }
           </h2>
-          <p class="mt-2 text-white/80 text-sm sm:text-base">
+          <div class="mt-3 flex flex-wrap gap-x-8 gap-y-2">
             @if (quarter().weeksRemaining > 0) {
-              Averaging {{ quarter().averageDaysPerWeek | number:'1.1-1' }} days/week
-              @if (quarter().requiredAvgForRemainder !== null) {
-                — need {{ quarter().requiredAvgForRemainder! | number:'1.1-1' }}/week
-                for the remaining {{ quarter().weeksRemaining | number:'1.1-1' }} weeks
+              <div>
+                <div class="text-xs uppercase tracking-wide text-white/70">Pace</div>
+                <div class="text-lg font-semibold">{{ quarter().averageDaysPerWeek | number:'1.1-1' }}/wk</div>
+              </div>
+              @if (quarter().requiredAvgForRemainder !== null && quarter().daysStillNeeded > 0) {
+                <div>
+                  <div class="text-xs uppercase tracking-wide text-white/70">Needed</div>
+                  <div class="text-lg font-semibold">{{ quarter().requiredAvgForRemainder! | number:'1.1-1' }}/wk</div>
+                </div>
               }
+              <div>
+                <div class="text-xs uppercase tracking-wide text-white/70">Remaining</div>
+                <div class="text-lg font-semibold">{{ quarter().weeksRemaining | number:'1.1-1' }} wks</div>
+              </div>
             } @else {
-              Final average: {{ quarter().averageDaysPerWeek | number:'1.1-1' }} days/week
+              <div>
+                <div class="text-xs uppercase tracking-wide text-white/70">Final Pace</div>
+                <div class="text-lg font-semibold">{{ quarter().averageDaysPerWeek | number:'1.1-1' }}/wk</div>
+              </div>
             }
-          </p>
+          </div>
         </div>
         <div class="flex-shrink-0 ml-4">
           <span
