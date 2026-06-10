@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first work-area entry time and location. Suitable for management review.
 
 ### Changed
+- Dashboard banner: replaced the dense "Averaging X days/week — need Y/week for
+  the remaining Z weeks" prose with labeled stat chips (Pace / Needed / Remaining).
+  Same numbers, less cognitive load at a glance. The "Needed" chip is hidden when
+  zero days are still needed; a completed period shows just "Final Pace".
 - Reports PDF: weekly chart now thins date labels for longer periods so the
   x-axis stays readable on quarter/year reports (every other week beyond 14
   buckets, every fourth beyond 28, every eighth beyond 56). Dropped the
