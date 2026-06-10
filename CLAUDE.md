@@ -196,6 +196,7 @@ frontend/src/app/
 | `GET` | `/api/v1/days/{date}` | Full daily breakdown for a date |
 | `GET` | `/api/v1/dashboard/summary` | All compliance stats across all periods |
 | `GET` | `/api/v1/reports/quarter/{year}/{quarter}` | Historical quarter report |
+| `GET` | `/api/v1/reports/export/pdf` | Export compliance report as PDF (period + optional from/to) |
 | `GET/POST/PUT/DELETE` | `/api/v1/zones` | Zone management |
 | `GET/PUT` | `/api/v1/users/me` | Current user profile |
 | `GET` | `/api/v1/audit` | Audit log |

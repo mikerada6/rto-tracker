@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Reports: export an RTO compliance report as PDF for week, month, quarter,
+  year, or a custom date range (up to 365 days). The PDF includes a cover
+  block with employee name and period, a compliance summary, a weekly bar
+  chart of office days, and a dated log of each qualifying day with the
+  first work-area entry time and location. Suitable for management review.
+
 ## [1.1.0] - 2026-06-10
 
 UX polish release. Smoothes out friction points in three frequently-used

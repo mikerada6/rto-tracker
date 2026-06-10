@@ -9,6 +9,7 @@ A self-hosted Return-to-Office compliance tracking system. Receives zone entry/e
 - Compliance dashboard with week/month/quarter/year breakdowns
 - Calendar view of office days
 - Historical quarterly reports
+- PDF report export (week / month / quarter / year / custom range) for management review
 - Multi-user support with invite-code registration
 - Admin tools for user and invite management
 
