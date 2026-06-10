@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zones: redesigned empty state with a prominent "Add your first zone" CTA
   and a short explanation of what zones are for, so first-time users have
   an obvious next action instead of hunting for the top-right button.
+- Events: added quick date-range chips (Today, Last 7 days, Last 30 days,
+  This month, This quarter) above the start/end pickers. Editing either
+  picker clears the active chip.
+- Events CSV upload: added a collapsible "Expected CSV format" section
+  documenting the column order, date/time format, and Arrived/Departed
+  event types, plus a "Download sample CSV" button.
 
 ## [1.0.0] - 2026-06-10
 
