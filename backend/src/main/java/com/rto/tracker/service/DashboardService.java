@@ -164,6 +164,10 @@ public class DashboardService {
                 .daysInOffice(totalDays)
                 .averageDaysPerWeek(stats.averageDaysPerWeek())
                 .isCompliant(isCompliant)
+                .weeksRemaining(stats.weeksRemaining())
+                .daysStillNeeded(stats.daysStillNeeded())
+                .requiredAvgForRemainder(stats.requiredAvgForRemainder())
+                .requiredDaysPerWeek(user.getRequiredDaysPerWeek().doubleValue())
                 .monthlyBreakdown(monthly)
                 .build();
     }
