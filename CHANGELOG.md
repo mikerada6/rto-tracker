@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-10
+
+UX polish release. Smoothes out friction points in three frequently-used
+parts of the UI — Settings, Zones, and Events.
+
 ### Added
 - Settings: copy-to-clipboard button on the post-regeneration API key alert,
   with a "✓ Copied" confirmation that reverts after 2 seconds.
@@ -75,5 +80,6 @@ Home Assistant deployment.
 - Single-tenant in practice; multi-user supported via API key but no admin UI
   beyond invite codes.
 
-[Unreleased]: https://github.com/mikerada6/rto-tracker/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/mikerada6/rto-tracker/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mikerada6/rto-tracker/releases/tag/v1.1.0
 [1.0.0]: https://github.com/mikerada6/rto-tracker/releases/tag/v1.0.0
