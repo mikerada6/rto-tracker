@@ -5,6 +5,10 @@ export interface QuarterReportResponse {
   daysInOffice: number;
   averageDaysPerWeek: number;
   isCompliant: boolean;
+  weeksRemaining: number;
+  daysStillNeeded: number;
+  requiredAvgForRemainder: number | null;
+  requiredDaysPerWeek: number;
   monthlyBreakdown: MonthlyBreakdown[];
 }
 

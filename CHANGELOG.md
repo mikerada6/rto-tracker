@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Reports page: the quarterly report no longer shows "Non-Compliant" just
+  because the quarter is in progress. The badge now uses the same
+  pace-aware status as the dashboard cards ("On Track" / "Behind" /
+  "At Risk" / "Compliant" / "Non-Compliant"), so a quarter that's
+  meeting the required rate but isn't over yet reads as "On Track"
+  instead of failing. The backend response exposes weeksRemaining,
+  daysStillNeeded, requiredAvgForRemainder, and requiredDaysPerWeek
+  so the UI can compute the status.
+
 ### Added
 - Reports: export an RTO compliance report as PDF for week, month, quarter,
   year, or a custom date range (up to 365 days). The PDF includes a cover

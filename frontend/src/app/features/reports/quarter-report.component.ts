@@ -8,6 +8,7 @@ import { QuarterReportResponse } from '../../core/models/report.model';
 import { SkeletonComponent } from '../../shared/components/skeleton.component';
 import { ThemeService } from '../../core/services/theme.service';
 import { ReportExportPanelComponent } from './components/report-export-panel.component';
+import { getComplianceStatus, getStatusLabel } from '../../core/utils/compliance-status.util';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend, annotationPlugin);
 
@@ -83,9 +84,9 @@ Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, L
             </div>
             <span
               class="px-3 py-1.5 rounded-full text-sm font-medium"
-              [class]="report()!.isCompliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+              [class]="statusBadgeClass()"
             >
-              {{ report()!.isCompliant ? '✓ Compliant' : '✕ Non-Compliant' }}
+              {{ statusIcon() }} {{ statusBadgeLabel() }}
             </span>
           </div>
 
@@ -164,6 +165,59 @@ export class QuarterReportComponent implements OnInit {
       .filter(p => p.year === year)
       .map(p => `Q${p.quarter}`)
       .sort();
+  });
+
+  readonly status = computed(() => {
+    const r = this.report();
+    if (!r) return null;
+    return getComplianceStatus(
+      {
+        periodStart: r.periodStart,
+        periodEnd: r.periodEnd,
+        daysInOffice: r.daysInOffice,
+        averageDaysPerWeek: r.averageDaysPerWeek,
+        weeksRemaining: r.weeksRemaining,
+        daysStillNeeded: r.daysStillNeeded,
+        requiredAvgForRemainder: r.requiredAvgForRemainder,
+        isCompliant: r.isCompliant
+      },
+      r.requiredDaysPerWeek
+    );
+  });
+
+  readonly statusBadgeLabel = computed(() => {
+    const s = this.status();
+    return s ? getStatusLabel(s) : '';
+  });
+
+  readonly statusBadgeClass = computed(() => {
+    switch (this.status()) {
+      case 'on-track':
+      case 'compliant':
+        return 'bg-green-100 text-green-700';
+      case 'behind':
+        return 'bg-amber-100 text-amber-700';
+      case 'critical':
+      case 'non-compliant':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
+  });
+
+  readonly statusIcon = computed(() => {
+    switch (this.status()) {
+      case 'on-track':
+      case 'compliant':
+        return '✓';
+      case 'behind':
+      case 'critical':
+        return '⚠';
+      case 'non-compliant':
+        return '✕';
+      default:
+        return '';
+    }
   });
 
   private chart: Chart | null = null;

@@ -20,6 +20,10 @@ public class QuarterReportResponse {
     private int daysInOffice;
     private double averageDaysPerWeek;
     private boolean isCompliant;
+    private double weeksRemaining;
+    private int daysStillNeeded;
+    private Double requiredAvgForRemainder;
+    private double requiredDaysPerWeek;
     private List<MonthlyBreakdown> monthlyBreakdown;
 
     @Data
