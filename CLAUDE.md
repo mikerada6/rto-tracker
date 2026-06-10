@@ -2,6 +2,61 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development workflow — GitFlow
+
+**This repository uses GitFlow.** `main` and `develop` are both branch-protected
+on GitHub — direct pushes are rejected, all changes go through pull requests
+that must pass `test-backend` and `test-frontend`.
+
+### When the user asks for a new feature or non-trivial change
+
+Always start work on a fresh feature branch off `develop`. Do not commit on
+`develop` or `main` directly — both are protected and the push will be rejected.
+
+```bash
+git checkout develop && git pull
+git checkout -b feature/short-kebab-description
+```
+
+Branch naming:
+- `feature/*` for new work or enhancements (branched from `develop`)
+- `hotfix/*` for urgent fixes against a shipped version (branched from `main`)
+- `release/*` for release stabilisation (branched from `develop`)
+
+### While working
+
+- Add a bullet to `CHANGELOG.md` under `## [Unreleased]` if the change is
+  user-visible (feature, bug fix, behaviour change). Skip for purely internal
+  refactors or doc-only edits.
+- Run the relevant tests before pushing:
+  - Backend: `cd backend && mvn test`
+  - Frontend: `cd frontend && npm run build`
+
+### Finishing a feature
+
+```bash
+git push -u origin feature/short-kebab-description
+# Open a PR targeting develop (the default branch).
+```
+
+Required checks (`test-backend`, `test-frontend`) must pass before merge.
+Linear history is required, so use squash or rebase merges, not merge commits.
+
+### Release / hotfix procedure
+
+See `CONTRIBUTING.md` for the full release-branch dance (version bumps,
+tagging, back-merging to develop) and hotfix flow. The short version: cut
+a `release/X.Y.Z` branch from develop, bump versions to `X.Y.Z` (no SNAPSHOT),
+update CHANGELOG, merge to **both** main and develop, then tag `vX.Y.Z` on
+main — the tag triggers Docker Hub publish.
+
+### Versioning
+
+- `main` is always at the released version (e.g. `1.0.0`).
+- `develop` is always at the next minor SNAPSHOT (e.g. `1.1.0-SNAPSHOT`).
+- Version lives in `backend/pom.xml`, `frontend/package.json`, and
+  `frontend/package-lock.json` — keep all three in sync.
+
 ## Commands
 
 ### Backend (Spring Boot / Maven)
