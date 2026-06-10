@@ -60,6 +60,31 @@
             margin: 0;
         }
 
+        .in-progress-note {
+            color: #94a3b8;
+            font-style: italic;
+        }
+
+        .pacing-note {
+            margin-top: 10pt;
+            padding: 10pt 14pt;
+            background-color: #fef9c3;
+            border-left: 3pt solid #ca8a04;
+            border-radius: 4pt;
+            font-size: 9.5pt;
+            color: #713f12;
+        }
+
+        .pacing-note.compliant {
+            background-color: #ecfccb;
+            border-left-color: #65a30d;
+            color: #365314;
+        }
+
+        .pacing-note strong {
+            font-weight: 700;
+        }
+
         .cover-meta {
             margin-top: 14pt;
             width: 100%;
@@ -289,7 +314,13 @@
 <div class="cover">
     <div class="eyebrow">RTO Compliance Report</div>
     <h1 th:text="${data.displayName}">Employee Name</h1>
-    <p class="subtitle" th:text="${data.periodLabel}">Reporting Period</p>
+    <p class="subtitle">
+        <span th:text="${data.periodLabel}">Reporting Period</span>
+        <span th:if="${summary.inProgress}" class="in-progress-note">
+            &#8211; in progress through
+            <span th:text="${#temporals.format(data.asOfDate, 'MMM d, yyyy')}">Jun 10, 2026</span>
+        </span>
+    </p>
 
     <table class="cover-meta">
         <tr>
@@ -307,8 +338,8 @@
             </td>
             <td>
                 <span class="label">Status</span>
-                <span th:if="${summary.compliant}" class="compliance-badge compliant">Meeting target</span>
-                <span th:unless="${summary.compliant}" class="compliance-badge non-compliant">Below target</span>
+                <span th:class="${summary.compliant} ? 'compliance-badge compliant' : 'compliance-badge non-compliant'"
+                      th:text="${summary.statusLabel}">Status</span>
             </td>
         </tr>
     </table>
@@ -335,7 +366,7 @@
             </div>
         </td>
         <td class="stat">
-            <div class="stat-label">Actual per Week</div>
+            <div class="stat-label" th:text="${summary.inProgress} ? 'Pace so far' : 'Actual per Week'">Actual per Week</div>
             <div class="stat-value">
                 <span th:text="${#numbers.formatDecimal(summary.averagePerWeek, 1, 2)}">2.85</span>
                 <span class="stat-suffix">days</span>
@@ -343,6 +374,36 @@
         </td>
     </tr>
 </table>
+
+<div th:if="${summary.inProgress}"
+     th:class="${summary.compliant} ? 'pacing-note compliant' : 'pacing-note'">
+    <span th:if="${summary.daysStillNeeded == 0}">
+        <strong>Target already met.</strong>
+        With <span th:text="${#numbers.formatDecimal(summary.weeksRemaining, 1, 1)}">5.7</span>
+        weeks remaining in the period.
+    </span>
+    <span th:if="${summary.daysStillNeeded > 0 and summary.requiredPaceRemainder != null}">
+        <strong>
+            <span th:text="${summary.daysStillNeeded}">15</span>
+            more office day<span th:if="${summary.daysStillNeeded != 1}">s</span> needed
+        </strong>
+        across the remaining
+        <span th:text="${#numbers.formatDecimal(summary.weeksRemaining, 1, 1)}">5.7</span>
+        weeks &#8211; that&#8217;s
+        <strong>
+            <span th:text="${#numbers.formatDecimal(summary.requiredPaceRemainder, 1, 2)}">2.65</span>
+            days per week
+        </strong>
+        to hit the target.
+    </span>
+    <span th:if="${summary.daysStillNeeded > 0 and summary.requiredPaceRemainder == null}">
+        <strong>
+            <span th:text="${summary.daysStillNeeded}">15</span>
+            more office day<span th:if="${summary.daysStillNeeded != 1}">s</span> needed
+        </strong>
+        before the period ends.
+    </span>
+</div>
 
 <h2 class="section">Weekly Breakdown</h2>
 <div class="chart" th:if="${!data.weeklyBuckets.isEmpty()}">

@@ -127,6 +127,19 @@ class ReportExportControllerIntegrationTest {
     }
 
     @Test
+    void exportPdf_acceptsAnchorParam() throws Exception {
+        // Anchor in the past: produces a fully completed quarter report
+        mockMvc.perform(get("/api/v1/reports/export/pdf")
+                        .param("period", "QUARTER")
+                        .param("anchor", "2025-04-15")
+                        .header("X-API-Key", apiKey))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("application/pdf"))
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("quarter-2025-04-15")));
+    }
+
+    @Test
     void exportPdf_emptyRangeStillSucceeds() throws Exception {
         eventRepository.deleteAll();
         LocalDate today = LocalDate.now();

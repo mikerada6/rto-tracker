@@ -11,6 +11,7 @@ public record ReportExportData(
         String periodLabel,
         LocalDate periodStart,
         LocalDate periodEnd,
+        LocalDate asOfDate,
         String generatedAt,
         Summary summary,
         List<WeeklyBucket> weeklyBuckets,
@@ -24,7 +25,12 @@ public record ReportExportData(
             double requiredDaysPerWeek,
             double averagePerWeek,
             int compliancePercent,
-            boolean compliant
+            boolean compliant,
+            boolean inProgress,
+            String statusLabel,
+            double weeksRemaining,
+            int daysStillNeeded,
+            Double requiredPaceRemainder
     ) {}
 
     @Builder
