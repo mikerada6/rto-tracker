@@ -22,6 +22,7 @@ app:
   bounce-debounce-seconds: 30
   rate-limit-rpm: ${APP_RATE_LIMIT_RPM:100}
   registration-enabled: ${APP_REGISTRATION_ENABLED:false}
+  version: @project.version@
   git-commit: ${GIT_COMMIT:dev}
   base-url: ${APP_BASE_URL:}
 

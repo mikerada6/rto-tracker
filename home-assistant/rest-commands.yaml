@@ -2,14 +2,17 @@
 # RTO Tracker — rest_command definitions
 # ============================================================
 # Add to configuration.yaml:
-#   rest_command: !include home_assistant_rest_commands.yaml
+#   rest_command: !include rest-commands.yaml
 #
-# API keys are stored in secrets.yaml — never hardcoded here.
-# See home_assistant_secrets_snippet.yaml for the required entries.
+# API keys and the base URL are stored in secrets.yaml — never
+# hardcoded here. !secret only works as a standalone YAML value,
+# so the full URL (including port and path) must be the secret.
+#
+# See secrets-snippet.example.yaml for the required entries.
 # ============================================================
 
 rto_event_michael:
-  url: "http://!secret rto_server_host:8080/api/v1/events"
+  url: !secret rto_events_url
   method: POST
   content_type: "application/json; charset=utf-8"
   headers:
@@ -22,7 +25,7 @@ rto_event_michael:
     }
 
 rto_event_jen:
-  url: "http://!secret rto_server_host:8080/api/v1/events"
+  url: !secret rto_events_url
   method: POST
   content_type: "application/json; charset=utf-8"
   headers:

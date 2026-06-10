@@ -46,24 +46,24 @@ import { VersionService } from '../../core/services/version.service';
         @if (!collapsed()) {
           <div class="px-3 py-1.5 group relative">
             <div class="flex items-center gap-2 text-[10px] text-gray-400 font-mono cursor-default"
-                 [title]="'FE: ' + versionService.frontendCommit() + '\nBE: ' + versionService.backendCommit()">
+                 [title]="'FE: ' + versionService.frontendVersion() + ' @ ' + versionService.frontendCommit() + '\nBE: ' + versionService.backendVersion() + ' @ ' + versionService.backendCommit()">
               <svg class="w-3.5 h-3.5 flex-shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              @if (versionService.frontendCommit() === versionService.backendCommit()) {
-                <a [href]="'https://github.com/mikerada6/rto-tracker/commit/' + versionService.frontendCommit()"
-                   target="_blank" rel="noopener"
-                   class="hover:text-blue-500 transition-colors">
-                  {{ versionService.abbreviate(versionService.frontendCommit()) }}
-                </a>
+              @if (versionService.versionsMatch()) {
+                <span class="flex items-center gap-1.5">
+                  <span class="text-gray-500">v{{ versionService.frontendVersion() }}</span>
+                  <span class="opacity-40">·</span>
+                  <a [href]="'https://github.com/mikerada6/rto-tracker/commit/' + versionService.frontendCommit()"
+                     target="_blank" rel="noopener"
+                     class="hover:text-blue-500 transition-colors">
+                    {{ versionService.abbreviate(versionService.frontendCommit()) }}
+                  </a>
+                </span>
               } @else {
                 <span>
-                  fe:<a [href]="'https://github.com/mikerada6/rto-tracker/commit/' + versionService.frontendCommit()"
-                        target="_blank" rel="noopener"
-                        class="hover:text-blue-500 transition-colors">{{ versionService.abbreviate(versionService.frontendCommit()) }}</a>
-                  be:<a [href]="'https://github.com/mikerada6/rto-tracker/commit/' + versionService.backendCommit()"
-                        target="_blank" rel="noopener"
-                        class="hover:text-blue-500 transition-colors">{{ versionService.abbreviate(versionService.backendCommit()) }}</a>
+                  fe:v{{ versionService.frontendVersion() }} /
+                  be:v{{ versionService.backendVersion() }}
                 </span>
               }
             </div>

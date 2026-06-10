@@ -149,10 +149,11 @@ actions:
             data:
               externalId: zone.home
               eventType: EXIT
-              # utcnow() returns a true UTC datetime object; appending 'Z'
-              # produces a valid ISO-8601 instant the backend Instant parser accepts.
+              # utcnow().isoformat() produces a valid ISO-8601 string with +00:00
+              # offset that Java's Instant.parse() accepts.
+              # Do NOT append ~ 'Z' — that creates an invalid +00:00Z suffix.
               # Do NOT use now().utc — that attribute does not exist in HA Jinja2.
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael arrives at work — Comcast main ───────────
       # office_visit_today is set on FIRST arrival only; GPS bounce
@@ -178,7 +179,7 @@ actions:
             data:
               externalId: zone.comcast
               eventType: ENTER
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael leaves work — Comcast main ───────────────
       - conditions:
@@ -217,7 +218,7 @@ actions:
             data:
               externalId: zone.comcast
               eventType: EXIT
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael arrives home ─────────────────────────────
       - conditions:
@@ -239,7 +240,7 @@ actions:
             data:
               externalId: zone.home
               eventType: ENTER
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael enters Lindenwold PATCO ──────────────────
       - conditions:
@@ -250,7 +251,7 @@ actions:
             data:
               externalId: zone.lindenwold_patco
               eventType: ENTER
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael leaves Lindenwold PATCO ──────────────────
       - conditions:
@@ -261,7 +262,7 @@ actions:
             data:
               externalId: zone.lindenwold_patco
               eventType: EXIT
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael enters 15/16th & Locust PATCO ────────────
       - conditions:
@@ -272,7 +273,7 @@ actions:
             data:
               externalId: zone.15_16th_locust_street_station
               eventType: ENTER
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael leaves 15/16th & Locust PATCO ────────────
       - conditions:
@@ -283,7 +284,7 @@ actions:
             data:
               externalId: zone.15_16th_locust_street_station
               eventType: EXIT
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael enters Bishop's Gate (Comcast secondary) ─
       # FIX: also sets office_visit_today so the day is counted
@@ -309,7 +310,7 @@ actions:
             data:
               externalId: zone.comcast_bishops_gate
               eventType: ENTER
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Michael leaves Bishop's Gate ─────────────────────
       - conditions:
@@ -320,7 +321,7 @@ actions:
             data:
               externalId: zone.comcast_bishops_gate
               eventType: EXIT
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Jen leaves home ───────────────────────────────────
       - conditions:
@@ -350,7 +351,7 @@ actions:
             data:
               externalId: zone.home
               eventType: EXIT
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Jen arrives at work ───────────────────────────────
       - conditions:
@@ -367,7 +368,7 @@ actions:
             data:
               externalId: zone.johnson_matthey
               eventType: ENTER
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Jen leaves work ───────────────────────────────────
       - conditions:
@@ -392,7 +393,7 @@ actions:
             data:
               externalId: zone.johnson_matthey
               eventType: EXIT
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Jen arrives home ─────────────────────────────────
       - conditions:
@@ -414,7 +415,7 @@ actions:
             data:
               externalId: zone.home
               eventType: ENTER
-              timestamp: "{{ utcnow().isoformat() ~ 'Z' }}"
+              timestamp: "{{ utcnow().isoformat() }}"
 
       # ── Legacy: increment office_days_quarter counter ────
       # Fires when office_visit_today flips to on (weekdays only).
